@@ -27,8 +27,11 @@ if __name__ == "__main__":
         emp, nai = B.empirical(p, rows, task), B.naive(p, rows, task)
         for j, h in enumerate(cfg["horizons"]):
             v = {n: summarize(q[:, j], rows["y"][:, j], rows["scale"], rows["a"], blk, rows["t"], boot)[1]["sPL"] for n, q in (("cand", z["q"]), ("emp", emp), ("naive", nai))}
-            s = ci(1 - v["cand"] / v["emp"])
-            out[f"{task}|h{h}"] = dict(skill_vs_empirical=s, skill_naive_vs_empirical=ci(1 - v["naive"] / v["emp"]), sPL=float(v["cand"][0]), sPL_empirical=float(v["emp"][0]),
-                                       rows=int(len(rows["t"])), passed=bool(s[2] < 0.01))
-            print(f"{task} h{h}: candidate skill vs empirical {100 * s[0]:+.2f}% [{100 * s[1]:+.2f}, {100 * s[2]:+.2f}]  ->  {'PASS' if s[2] < 0.01 else 'FAIL'}")
+            s, sn = ci(1 - v["cand"] / v["emp"]), ci(1 - v["cand"] / v["naive"])
+            best = sn if v["naive"][0] < v["emp"][0] else s          # amendment A1: vs the better unconditional baseline of the horizon
+            out[f"{task}|h{h}"] = dict(skill_vs_empirical=s, skill_vs_naive=sn, skill_naive_vs_empirical=ci(1 - v["naive"] / v["emp"]), sPL=float(v["cand"][0]),
+                                       sPL_empirical=float(v["emp"][0]), sPL_naive=float(v["naive"][0]), rows=int(len(rows["t"])), passed=bool(s[2] < 0.01),
+                                       passed_amended=bool(best[2] < 0.01), skill_vs_best_unconditional=best)
+            print(f"{task} h{h}: vs empirical {100 * s[0]:+.2f}% [{100 * s[1]:+.2f}, {100 * s[2]:+.2f}] {'PASS' if s[2] < 0.01 else 'FAIL'} (as pre-registered) | "
+                  f"vs best unconditional {100 * best[0]:+.2f}% [{100 * best[1]:+.2f}, {100 * best[2]:+.2f}] {'PASS' if best[2] < 0.01 else 'FAIL'} (amendment A1)")
     json.dump(out, open(os.path.join(D.RUNS, "placebo", f"{a.name}.json"), "w"), indent=1)

@@ -118,4 +118,25 @@ included, data loading is not.
 
 ## Amendments
 
-(none yet)
+All made on 2026-11-12, after the first results existed. None changes a row, a target, a metric or a fold.
+
+- A1 (placebo reference, section 6.3). As pre-registered the candidate FAILED the placebo at hourly h = 24: +3.10 % [+2.95, +3.25]
+  vs `empirical`. Cause: at h = 24 the `empirical` reference (quantiles of overlapping 24-bar sums, about 21 independent
+  samples per context) is itself a poor unconditional forecast; on the same permuted data the Gaussian `naive` beats it by
+  +2.75 %. The check is amended to compare against the better of `naive` and `empirical` at each horizon. Under A1 every horizon
+  passes (largest: hourly h = 6, +0.81 % [+0.77, +0.85]). Both verdicts are reported.
+- A2 (Timestral kernel at h = 24). Rows guarantee 6,200 bars of history, 512 aggregated 24-bar returns need 12,289, so
+  `timestral-max` uses the flip-averaged 256 context at h = 24 (512 at h = 1 and 6). The kernel has no daily h = 5 entry
+  (1,281 days needed, 600 guaranteed); `timestral-official` covers that table.
+- A3 (rows added after the first results, all scored on the same rows): `ewma-seasonal` (to test whether intraday / weekly
+  volatility seasonality explains differences), `timestral-official-2048` (the reference pipeline with a 2,048-bar context, so
+  Timestral is not handicapped by the 512 standard), `ens-bmt-s-sym+timestral-official` (quantile average), the `-sym`
+  (2-pass flip-averaged) variant of every candidate. `timestral-official` is used as a third paired reference.
+- A4 (candidate recipe). Steps, EMA and the validation weighting were chosen on the validation windows of F1 and F3 in two
+  preliminary sweeps (`runs/sweep*.log`); an earlier 6,000-step run was stopped (it diverged on a dead series in F2) and was never
+  scored through the leaderboard. The trainer prints row-pooled test sPL per fold, so F1 and F3 test numbers of the sweep
+  configurations were visible while the recipe was chosen. They agreed to within 0.001 across configurations (including the
+  zero-median ablation, which was dropped), so there was nothing to select on, but F1 and F3 cannot be called blind for the
+  recipe. F2 and F4 were not touched before the final runs.
+- A5 (speed). Calls slower than a second are timed fewer than 30 times; the count is in `runs/speed.json`. CPU runs shared the
+  host with other tenants (load average about 80 on 72 threads).

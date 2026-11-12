@@ -66,7 +66,7 @@ def run(model, a):
     elif model == "bmt-mojo-gpu":
         wait_for_gpu(2500)
         env = {"LD_LIBRARY_PATH": CUDA_LIB, "MODULAR_NVPTX_COMPILER_PATH": PTXAS}
-        b = os.path.join(D.REPO, "build", "bmt_gpu_sm120")
+        b = os.environ.get("BMT_GPU_BIN", os.path.join(D.REPO, "build", "bmt_gpu_sm120"))
         p = subprocess.Popen([b, "serve", a.weights, "4096"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=dict(os.environ, **env))
         p.stderr.readline()
         res.update(vram_mib=vram_of(p.pid))

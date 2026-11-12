@@ -10,3 +10,6 @@ nice -n 10 "$E/bin/mojo" build -O3 src/bmt.mojo -o build/bmt
 if [ "${1:-}" = gpu ]; then
   nice -n 10 "$E/bin/mojo" build -O3 --target-accelerator=nvidia:sm_120 src/bmt_gpu.mojo -o build/bmt_gpu_sm120
 fi
+if [ "${1:-}" = gpu ]; then   # size-t build (model dimensions are compile-time)
+  nice -n 10 "$E/bin/mojo" build -O3 -D D=64 -D NL=2 -D NH=4 --target-accelerator=nvidia:sm_120 src/bmt_gpu.mojo -o build/bmt_gpu_t_sm120
+fi

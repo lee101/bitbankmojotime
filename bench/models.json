@@ -1,0 +1,10 @@
+{
+ "naive": {"params": "0"}, "drift": {"params": "0"}, "empirical": {"params": "0"}, "seasonal-naive": {"params": "0"},
+ "ewma": {"params": "1"}, "ewma-seasonal": {"params": "1"}, "garch": {"params": "4 / asset"},
+ "autoets": {"params": "fit"}, "autoarima": {"params": "fit"},
+ "chronos-2": {"params": "120M"}, "chronos-2-ret": {"params": "120M"},
+ "timestral-fast": {"params": "209M"}, "timestral-max": {"params": "209M"}, "timestral-official": {"params": "209M"}, "timestral-official-2048": {"params": "209M"},
+ "bmt-t": {"params": "0.11M"}, "bmt-t-sym": {"params": "0.11M"}, "bmt-s": {"params": "0.81M"}, "bmt-s-sym": {"params": "0.81M"},
+ "bmt-s-x": {"params": "0.82M"}, "bmt-s-x-sym": {"params": "0.82M"}, "bmt-m": {"params": "4.8M"}, "bmt-m-sym": {"params": "4.8M"},
+ "ens-bmt-s-sym+timestral-official": {"params": "0.81M + 209M"}
+}
