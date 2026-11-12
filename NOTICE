@@ -1,0 +1,12 @@
+bitbankmojotime
+Copyright 2026 Lee Penkman. Code licensed under Apache-2.0 (see LICENSE).
+
+Third-party material and references:
+- Timestral (Mistral AI): used only as an external benchmark baseline; weights are NOT included.
+  Weights are under Mistral's Modified MIT licence (revenue restriction applies to derivatives).
+- Chronos-2 (Amazon, Apache-2.0): external benchmark baseline; weights not included.
+- StatsForecast (Nixtla, Apache-2.0): baseline implementations used via the library.
+- Market data: Binance Vision public archives (data.binance.vision), CC BY-NC-SA 4.0. The data is not
+  redistributed here. data/universe.json (symbol list) and any tables or model weights derived from that
+  data are for non-commercial use under CC BY-NC-SA 4.0 and are NOT covered by the Apache-2.0 grant.
+This project is not affiliated with or endorsed by Binance, Mistral AI or Amazon.

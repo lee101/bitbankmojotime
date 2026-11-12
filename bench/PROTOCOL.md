@@ -1,4 +1,4 @@
-# Benchmark protocol (v1, fixed before any result was produced)
+# Benchmark protocol (v1 fixed before any result was produced; v1.1 of 2026-11-12 registers the amended placebo and the search rules)
 
 The git history is the record: this file was committed before the first prediction file existed. Changes after that
 date are listed under "Amendments" at the bottom with the reason, and never silently.
@@ -88,12 +88,24 @@ one-step naive error of the log-price series, i.e. the MASE denominator).
    origin >= `train_end`; no (asset, bar) is both a training target and a test target; `E_unseen` symbols absent from
    every training set.
 2. Causality test: changing any bar after the origin leaves every model input of that row bit-identical.
-3. Shuffled-time placebo: the returns of each asset are permuted in time (independently inside the training period
-   and inside each test period), the learned candidate is retrained and re-scored on the permuted data. Temporal
-   structure is gone, so nothing can honestly beat an unconditional forecast. Pass = the upper end of the 95 % interval
-   of the candidate's sPL skill vs the `empirical` baseline (context quantiles) is below 1 %. The 1 % allowance is
-   for legitimately better tail estimation than 512-sample empirical quantiles; a real leak shows up as tens of
-   percent.
+3. Shuffled-time placebo (registered form since v1.1, 2026-11-12; the v1 form and why it was replaced are in amendment A1): the
+   bars of each asset are permuted in time (independently inside the training period and inside each test period), the learned
+   candidate is retrained and re-scored on the permuted data. Temporal structure is gone, so nothing can honestly beat an
+   unconditional forecast. Pass = at every horizon the upper end of the 95 % interval of the candidate's sPL skill vs the BETTER
+   of the two unconditional baselines (`naive`, `empirical`) is below 1 %. The 1 % allowance is for legitimately better tail
+   estimation; a real leak shows up as tens of percent. Rerun for every promoted architecture.
+
+## 6b. Model search (v1.1)
+
+- The search objective is computed on validation rows only: the 90 days before each fold's purged training end, trained-on
+  evaluation symbols, every hour (hourly) / every day (daily), targets and horizons as in section 3. Objective = mean over the
+  five (task, horizon) pairs of asset-equal sPL / sqrt(h), averaged over the four folds.
+- The search code has no access to test rows: it never loads the benchmark row tables and computes no test metric.
+- Successive halving: 500 steps on one fold for every proposal, the best third 1,500 steps on two folds, the best of those all
+  four folds. A config is promoted over the incumbent only if the paired block-bootstrap 95 % interval of its validation sPL
+  improvement excludes zero at two or more of the five (task, horizon) pairs and it is significantly worse at none.
+- Only promoted configs are scored on the test folds, from the checkpoints the search already trained, and every promoted config
+  gets a leaderboard row. Stop: 100 trials without a promotion, the GPU budget, or an exhausted proposal list.
 
 ## 7. Baselines
 
@@ -140,3 +152,14 @@ All made on 2026-11-12, after the first results existed. None changes a row, a t
   recipe. F2 and F4 were not touched before the final runs.
 - A5 (speed). Calls slower than a second are timed fewer than 30 times; the count is in `runs/speed.json`. CPU runs shared the
   host with other tenants (load average about 80 on 72 threads).
+- A6 (search checkpoints, 2026-11-12). The first search run kept the folds it had trained at the two-fold stage (F1, F3) in memory
+  and did not write their checkpoints. For the two promoted wave-1 configs those two folds were retrained after the search with
+  the same seeds, windows and recipe (`train/refit.py`, validation objective of each refit in `runs/search/refit.jsonl`); their
+  test predictions come from the refits, F2 / F4 from the search's own checkpoints. The search code now writes every fold.
+- A7 (second search wave). Inputs that need the 5-minute archive were searched on the 64 evaluation symbols only, trained on the
+  47 trained-on ones (the phase-2 learning curve was flat from 17 symbols up). The wave-2 incumbent was retrained in that setting
+  first, so promotions are paired like-for-like. Held-out symbols stay held out; peer baskets and market series are built from
+  trained-on symbols only, and peer sets are fixed from the year before each fold's training limit.
+- A8 (row-count wording). Section 6b says "every hour" for validation rows: hourly validation uses stride 1, the test rows keep
+  the stride-5 origins of section 3.
+

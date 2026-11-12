@@ -35,3 +35,17 @@ def cap_torch(gb=None):
     if torch.cuda.is_available():
         gb = gb or float(os.environ.get("BMT_VRAM_GB", "1.0"))
         torch.cuda.set_per_process_memory_fraction(gb * 2**30 / torch.cuda.get_device_properties(0).total_memory)
+
+
+def pause_if_needed(min_free_mb=1500, poll=30):
+    """called inside long GPU loops: yield (release the allocator cache and sleep) during the quiet window or when the card is nearly full.
+    Returns the seconds spent paused."""
+    t0 = time.time()
+    while in_blackout() or free_mb() < min_free_mb:
+        try:
+            import torch
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+        time.sleep(poll)
+    return time.time() - t0

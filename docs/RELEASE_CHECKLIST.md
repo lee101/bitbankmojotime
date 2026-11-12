@@ -1,4 +1,4 @@
-# Release checklist (nothing here has been done; the repository is private)
+# Release checklist (licence, NOTICE and history scan done 2026-11-12; weights and CI items still open)
 
 Owner decisions first (docs/PLAN.md section 7): name, code licence, data policy / weight tier, Timestral derivatives.
 

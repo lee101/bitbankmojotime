@@ -24,7 +24,8 @@ def speed_md():
     for k, r in s.items():
         b = r["batches"]
         g = lambda x: f"{b[x]['rows_s']:,.0f}, {b[x]['p50_ms']:.2f} / {b[x]['p99_ms']:.2f}" if x in b else "not run (minutes per call)"
-        out.append(f"| {names.get(k, k)} | {r.get('device', '')} | {g('1')} | {g('64')} | {g('4096')} | {r.get('vram_mib') or '-'} | {mb(r.get('size_bytes'))} | {mb(r.get('weights_bytes'))} | "
+        nm = names.get(k, (k.split(":")[1] + (", Mojo GPU (fp32)" if "gpu" in k else ", Mojo CPU")) if ":" in k and k.split(":")[1].startswith("bmt2") else k)
+        out.append(f"| {nm} | {r.get('device', '')} | {g('1')} | {g('64')} | {g('4096')} | {r.get('vram_mib') or '-'} | {mb(r.get('size_bytes'))} | {mb(r.get('weights_bytes'))} | "
                    f"{r['before']['gpu_util_pct']} %, {r['before']['gpu_mem_used_mib'] / 1024:.1f} GB |")
     out += ["", "Batch pipelines of the statistical baselines (whole benchmark run, numpy / numba, not a latency measurement):", "",
             "| model | rows/s | note |", "|---|---|---|"]
@@ -70,9 +71,46 @@ def extra_md():
     return "\n".join(out)
 
 
+def search_md():
+    S = json.load(open(os.path.join(R, "search", "summary.json")))
+    out = [f"{S['trials']} configurations tried in {S['rounds']} rounds, {S['gpu_hours']:.2f} GPU-hours; stop reason: {S.get('stop', '?')}. Full ledger: `docs/RESEARCH_LOG.md`.", "",
+           "| step | config | validation objective | paired validation improvement over the previous incumbent, % (95 %) |", "|---|---|---|---|"]
+    for i, c in enumerate(S["chain"]):
+        cs = "; ".join(f"{k.replace('|', ' ')} {100 * v[0]:+.2f} [{100 * v[1]:+.2f}, {100 * v[2]:+.2f}]" for k, v in c["cmp"].items()) if c.get("cmp") else "(baseline: returns only)"
+        out.append(f"| {i} | `{c['name']}` | {c['obj']:.5f} | {cs} |")
+    return "\n".join(out)
+
+
+def lc2_md():
+    S = json.load(open(os.path.join(R, "search", "summary.json")))
+    out = ["| size | parameters | share of training symbols | symbols | validation objective | vs size s at 100 %, paired % (95 %): hourly h1 / h6 / h24, daily h1 / h5 |", "|---|---|---|---|---|---|"]
+    for r in sorted(S.get("lc", []), key=lambda r: ("tsm".index(r["size"]), r["frac"])):
+        cs = " / ".join(f"{100 * v[0]:+.2f} [{100 * v[1]:+.2f}, {100 * v[2]:+.2f}]" for v in r["cmp"].values()) if r.get("cmp") else "reference"
+        out.append(f"| {r['size']} | {r['params']:,} | {r['frac']:.0%} | {r['assets']} | {r['obj']:.5f} | {cs} |")
+    return "\n".join(out)
+
+
+def placebo2_md():
+    S = json.load(open(os.path.join(R, "search", "summary.json")))
+    p = os.path.join(R, "placebo", f"placebo-{S.get('final', 'base')}.json")
+    if not os.path.exists(p):
+        return "(not run)"
+    d = json.load(open(p))
+    out = ["| task, horizon | candidate vs the better unconditional baseline % (pass < 1 %) | reference | verdict |", "|---|---|---|---|"]
+    for k, v in d.items():
+        out.append(f"| {k.replace('|', ', ')} | {f3(v['skill_vs_best_unconditional'])} | {v['reference']} | {'PASS' if v['passed'] else 'FAIL'} |")
+    return "\n".join(out)
+
+
+def read(name):
+    p = os.path.join(R, name)
+    return open(p).read() if os.path.exists(p) else "(not run)"
+
+
 if __name__ == "__main__":
     info = json.load(open(os.path.join(D.REPO, "bench", "models.json")))
     tabs = "\n".join(tables(t, json.load(open(os.path.join(R, f"scores_{t}.json"))), info) for t in D.TASKS)
+    HEAD = HEAD.replace("{{SEARCH}}", search_md()).replace("{{LC2}}", lc2_md()).replace("{{PLACEBO2}}", placebo2_md()).replace("{{TRADABLE}}", read("tradable.md")).replace("{{VOLTIMING}}", read("voltiming.md"))
     md = HEAD.replace("{{EXTRA}}", extra_md()).replace("{{SPEED}}", speed_md()).replace("{{LC}}", lc_md()).replace("{{PLACEBO}}", placebo_md()).replace("{{TABLES}}", tabs)
     open(os.path.join(D.REPO, "bench", "LEADERBOARD.md"), "w").write(md)
     print(len(md), "chars")

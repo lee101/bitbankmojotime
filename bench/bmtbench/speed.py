@@ -61,8 +61,9 @@ def run(model, a):
     res = {"model": model, "before": gpu_state()}
     if model.startswith("bmt-mojo-cpu"):
         thr = int(model.split("@")[1]) if "@" in model else 1
-        res.update(device=f"CPU {thr} thread" + ("s" if thr > 1 else ""), batches=mojo_bench(os.path.join(D.REPO, "build", "bmt"), a.weights, thr),
-                   size_bytes=os.path.getsize(os.path.join(D.REPO, "build", "bmt")), weights_bytes=os.path.getsize(a.weights), vram_mib=0)
+        cb = os.environ.get("BMT_CPU_BIN", os.path.join(D.REPO, "build", "bmt"))
+        res.update(device=f"CPU {thr} thread" + ("s" if thr > 1 else ""), batches=mojo_bench(cb, a.weights, thr),
+                   size_bytes=os.path.getsize(cb), weights_bytes=os.path.getsize(a.weights), vram_mib=0)
     elif model == "bmt-mojo-gpu":
         wait_for_gpu(2500)
         env = {"LD_LIBRARY_PATH": CUDA_LIB, "MODULAR_NVPTX_COMPILER_PATH": PTXAS}

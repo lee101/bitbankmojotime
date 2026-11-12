@@ -117,7 +117,7 @@ def val_bounds(task):
     return [(n, s - c["purge"] - c["val"], s - c["purge"]) for n, s, _ in fold_bounds(task)]
 
 
-def build_rows(p, task, bounds=None):
+def build_rows(p, task, bounds=None, stride=None):
     """benchmark rows for the symbols of panel p: dict(a, t (bar index into p), fold, y[N, H], scale[N]).
     bounds default to the test periods; val_bounds(task) gives the validation rows."""
     cfg = TASKS[task]
@@ -130,7 +130,7 @@ def build_rows(p, task, bounds=None):
         lo, hi = s - p.t0, min(e - p.t0, p.T)                        # test bars [lo, hi)
         for a in range(len(p.syms)):
             t = np.arange(max(lo, 0), hi - hm)
-            t = t[(t + p.t0) % cfg["stride"] == 0]
+            t = t[(t + p.t0) % (stride or cfg["stride"]) == 0]
             if not len(t):
                 continue
             ok = p.real[a, t] & (t - p.first[a] >= cfg["min_hist"])

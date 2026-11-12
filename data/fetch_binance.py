@@ -4,7 +4,7 @@
   list   : index every *USDT spot symbol and its monthly 1h archive months -> cache/index.json
   fetch  : download + sha256-verify monthly zips for the chosen symbols      -> cache/zips/<SYM>/
   build  : parse zips into one compact array per symbol                      -> cache/hourly/<SYM>.npz
-           (t = open time in epoch hours, o/h/l/c, qv = quote volume, n = trade count)
+           (t = open time in epoch hours, o/h/l/c, qv = quote volume, n = trade count, tb = taker-buy quote volume)
 
 Nothing downloaded is committed (data/cache is git-ignored). Archive timestamps are ms before 2025 and us from 2025 on.
 """
@@ -106,7 +106,7 @@ def parse_zip(path):
         raw = z.read(z.namelist()[0]).decode()
     if raw[:9] == "open_time":
         raw = raw.split("\n", 1)[1]
-    a = np.loadtxt(io.StringIO(raw), delimiter=",", usecols=(0, 1, 2, 3, 4, 7, 8), ndmin=2, dtype=np.float64)
+    a = np.loadtxt(io.StringIO(raw), delimiter=",", usecols=(0, 1, 2, 3, 4, 7, 8, 10), ndmin=2, dtype=np.float64)
     t = a[:, 0]
     t = np.where(t > 1e14, t / 1e6, t / 1e3)                        # us (2025+) or ms -> s
     return np.column_stack([t, a[:, 1:]])
@@ -126,7 +126,7 @@ def build_one(sym, interval):
     out = os.path.join(CACHE, {"1h": "hourly", "1d": "daily"}[interval])
     os.makedirs(out, exist_ok=True)
     np.savez_compressed(os.path.join(out, sym + ".npz"), t=t, o=a[:, 1].astype(np.float64), h=a[:, 2], l=a[:, 3], c=a[:, 4],
-                        qv=a[:, 5].astype(np.float32), n=a[:, 6].astype(np.float32))
+                        qv=a[:, 5].astype(np.float32), n=a[:, 6].astype(np.float32), tb=a[:, 7].astype(np.float32))
     return sym, len(t)
 
 
