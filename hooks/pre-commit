@@ -1,0 +1,4 @@
+#!/bin/sh
+# secret scan of the staged changes; install with: git config core.hooksPath hooks
+command -v gitleaks >/dev/null 2>&1 || { echo "gitleaks not installed: https://github.com/gitleaks/gitleaks" >&2; exit 1; }
+exec gitleaks git --pre-commit --staged --redact --no-banner -c .gitleaks.toml

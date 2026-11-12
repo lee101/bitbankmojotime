@@ -1,0 +1,4 @@
+#!/bin/sh
+# full-history secret scan before anything leaves the machine
+command -v gitleaks >/dev/null 2>&1 || { echo "gitleaks not installed" >&2; exit 1; }
+exec gitleaks git --redact --no-banner -c .gitleaks.toml

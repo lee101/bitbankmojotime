@@ -1,0 +1,13 @@
+[project]
+name = "bitbankmojotime"
+version = "0.0.1"
+description = "Fast probabilistic forecaster for crypto and stocks: Mojo inference, honest unseen-fold benchmarks"
+requires-python = ">=3.11"
+dependencies = ["numpy>=2", "scipy"]
+
+[project.optional-dependencies]
+bench = ["statsforecast>=2.0", "arch>=7", "chronos-forecasting>=2.0", "torch>=2.7", "safetensors"]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

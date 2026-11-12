@@ -1,0 +1,16 @@
+.venv/
+data/cache/
+runs/
+build/
+__pycache__/
+*.pyc
+*.npz
+*.npy
+*.f32
+*.f16
+*.safetensors
+*.pt
+*.zip
+.pytest_cache/
+.pixi/
+*.log

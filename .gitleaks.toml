@@ -1,0 +1,18 @@
+title = "bitbankmojotime gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "bmt-env-assignment"
+description = "credential-looking assignment (API keys, tokens, secrets) for services this project touches"
+regex = '''(?i)(runpod|r2|cloudflare|binance|alpaca|bitbank|poloniex|hf|hugging_?face|tsl|tinfra)[a-z0-9_]{0,24}(key|secret|token|password)\s*[:=]\s*["']?[A-Za-z0-9/+_\-]{16,}'''
+
+[[rules]]
+id = "bmt-private-path"
+description = "paths to private data or key material must not be committed"
+regex = '''(keys\.sha256|\.config/tinfra/|r2-[a-z0-9_-]+\.env|/vfast/data/|alpaca[a-z0-9_/-]*\.(csv|parquet|npz))'''
+
+[allowlist]
+description = "docs that name the patterns themselves"
+paths = ['''\.gitleaks\.toml$''']
