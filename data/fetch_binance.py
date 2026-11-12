@@ -145,6 +145,6 @@ if __name__ == "__main__":
     p.add_argument("--symbols", help="file with one symbol per line (default: every indexed symbol)")
     p.add_argument("--first", default="2017-01")
     p.add_argument("--last", default="2026-10")
-    p.add_argument("--jobs", type=int, default=12)
+    p.add_argument("--jobs", type=int, default=8)
     a = p.parse_args()
     {"list": cmd_list, "fetch": cmd_fetch, "build": cmd_build}[a.cmd](a)

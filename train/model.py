@@ -25,13 +25,14 @@ class Block(nn.Module):
         q, k, v = s.qkv(s.n1(x)).view(N, T, 3, s.h, D // s.h).permute(2, 0, 3, 1, 4)
         a = F.scaled_dot_product_attention(q, k, v).transpose(1, 2).reshape(N, T, D)
         x = x + s.o(a)
-        return x + s.f2(F.gelu(s.f1(s.n2(x)), approximate="tanh"))
+        return x + s.f2(F.relu(s.f1(s.n2(x))))
 
 
 class BMT(nn.Module):
-    def __init__(s, horizons=(1, 5, 6, 24), L=512, patch=16, d=128, layers=4, heads=4, cov=False, cal=False):
+    def __init__(s, horizons=(1, 5, 6, 24), L=512, patch=16, d=128, layers=4, heads=4, cov=False, cal=False, zm=False):
         super().__init__()
-        s.cfg = dict(horizons=list(horizons), L=L, patch=patch, d=d, layers=layers, heads=heads, cov=cov, cal=cal)
+        s.cfg = dict(horizons=list(horizons), L=L, patch=patch, d=d, layers=layers, heads=heads, cov=cov, cal=cal, zm=zm)
+        s.zm = zm
         s.L, s.p, s.cov, s.cal, s.H = L, patch, cov, cal, len(horizons)
         s.register_buffer("sqh", torch.tensor([math.sqrt(h) for h in horizons]))
         s.embed = nn.Linear(patch * (5 if cov else 2), d)
@@ -70,7 +71,7 @@ class BMT(nn.Module):
         if s.cov:
             z = torch.cat([z, torch.log(sc / sb).clamp(-5, 5)], 1)
         o = s.head(z).float().view(N, s.H, 21)
-        med = o[..., 10:11]
+        med = o[..., 10:11] * (0.0 if s.zm else 1.0)                  # zm: zero-median ablation (not supported by the Mojo kernels)
         dn = torch.cumsum(F.softplus(o[..., :10]).flip(-1), -1).flip(-1)
         up = torch.cumsum(F.softplus(o[..., 11:]), -1)
         return torch.cat([med - dn, med, med + up], -1), sc

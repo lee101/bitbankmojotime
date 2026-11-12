@@ -30,6 +30,11 @@ if __name__ == "__main__":
         elif m == "ewma":
             q, lam = B.ewma(p, rows, a.task, seen_idx)
             meta["lambda_per_fold"] = lam
+        elif m == "ewma-seasonal":
+            import json, os
+            lam = json.load(open(D.pred_path(a.task, "ewma")[:-4] + ".json"))["lambda_per_fold"]
+            q = B.ewma_seasonal(p, rows, a.task, lam)
+            meta["lambda_per_fold"] = lam
         elif m == "garch":
             q = B.garch(p, rows, a.task, starts)
         elif m in ("timestral-fast", "timestral-max"):
@@ -38,9 +43,12 @@ if __name__ == "__main__":
         elif m in ("chronos-2", "chronos-2-ret"):
             from . import foundation as F
             q = F.chronos2(p, rows, a.task, "ret" if m.endswith("ret") else "logp")
-        elif m == "timestral-official":
+        elif m.startswith("timestral-official"):                    # timestral-official-2048 = same pipeline, 2048-bar context
             from . import foundation as F
-            q = F.timestral_official(p, rows, a.task)
+            c = int(m.split("-")[2]) if m.count("-") == 2 else D.CTX
+            if c + 1 > D.TASKS[a.task]["min_hist"]:
+                print(m, "needs more history than every row has: no entry"); continue
+            q = F.timestral_official(p, rows, a.task, batch=256 if c <= 512 else 96, ctx=c)
         else:
             raise SystemExit("unknown model " + m)
         meta.update(seconds=round(time.time() - t0, 1), rows=len(rows["t"]))

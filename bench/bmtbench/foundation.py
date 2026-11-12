@@ -119,7 +119,7 @@ def chronos2(p, rows, task, inp="logp", batch=256, dtype="float32"):
     return out if inp == "logp" else out[:, :1]
 
 
-def timestral_official(p, rows, task, batch=256):
+def timestral_official(p, rows, task, batch=256, ctx=CTX):
     import torch
     from timestral import TimestralForecaster
     from .gpu import wait_for_gpu, cap_torch
@@ -129,7 +129,7 @@ def timestral_official(p, rows, task, batch=256):
     out = np.zeros((len(rows["t"]), len(H), NQ), np.float32)
     for i in range(0, len(out), batch):
         a, t = rows["a"][i:i + batch], rows["t"][i:i + batch]
-        x = ctx_logp(p, a, t)
+        x = ctx_logp(p, a, t, ctx)
         base = x[:, -1:]
         with torch.inference_mode():
             q = f.forecast(torch.tensor(x - base, dtype=torch.float32), prediction_length=max(H), clip_nonnegative=False).quantiles

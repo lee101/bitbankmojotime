@@ -4,7 +4,7 @@ import numpy as np
 from . import data as D
 from .metrics import Boot, summarize, ci
 
-REFS = ("naive", "timestral-fast")
+REFS = ("naive", "timestral-fast", "timestral-official")
 GROUPS = ("all", "seen", "unseen", "BTCUSDT", "ETHUSDT", "F1", "F2", "F3", "F4")
 
 
@@ -67,24 +67,25 @@ def tables(task, res, info):
         rk = sorted((m for m in names if f"all|h{h}|{m}" in res), key=lambda m: res[f"all|h{h}|{m}"]["sPL"][0])
         n = res[f"all|h{h}|{rk[0]}"]
         out.append(f"\n### {task}, horizon {h} ({n['n']} rows, {n['assets']} assets, all folds)\n")
-        out.append("| model | params | sPL [95% CI] | skill vs naive % | skill vs timestral-fast % (paired) | pinball bp | CRPS bp | win % vs naive / tsl-fast |")
-        out.append("|---|---|---|---|---|---|---|---|")
+        out.append("| model | params | sPL [95% CI] | skill vs naive % | vs timestral-fast % (paired) | vs timestral-official % (paired) | pinball bp | CRPS bp | win % vs naive / tsl-fast / tsl-official |")
+        out.append("|---|---|---|---|---|---|---|---|---|")
         for m in rk:
             s = res[f"all|h{h}|{m}"]
             out.append(f"| {m} | {info.get(m, {}).get('params', '-')} | {fmt(s['sPL'])} | {fmt(s.get('skill_naive'), 2, True)} | {fmt(s.get('skill_timestral-fast'), 2, True)} | "
-                       f"{fmt(s['pinball'], 3)} | {fmt(s['crps'], 3)} | {fmt(s.get('win_naive'), 0, True)} / {fmt(s.get('win_timestral-fast'), 0, True)} |")
+                       f"{fmt(s.get('skill_timestral-official'), 2, True)} | {fmt(s['pinball'], 3)} | {fmt(s['crps'], 3)} | "
+                       f"{fmt(s.get('win_naive'), 0, True)} / {fmt(s.get('win_timestral-fast'), 0, True)} / {fmt(s.get('win_timestral-official'), 0, True)} |")
         out.append("\n| model | MAE bp | relMAE vs zero | MASE | cov 80 / 90 / 98 % | calib | DA % (non-zero medians %) | IC |")
         out.append("|---|---|---|---|---|---|---|---|")
         for m in rk:
             s = res[f"all|h{h}|{m}"]
             out.append(f"| {m} | {fmt(s['mae'], 3)} | {fmt(s['relmae'], 4)} | {fmt(s['mase'], 4)} | {s['c80'][0] * 100:.1f} / {s['c90'][0] * 100:.1f} / {s['c98'][0] * 100:.1f} | "
                        f"{s['calib']:.4f} | {fmt(s['da'][0], 2, True)} ({s['nz_median'] * 100:.0f}) | {fmt(s['ic'], 4)} |")
-        out.append(f"\nSkill vs timestral-fast %, paired 95 % CI, by group (positive = better than Timestral fast), horizon {h}:\n")
+        out.append(f"\nSkill vs timestral-official %, paired 95 % CI, by group (positive = better than the reference Timestral pipeline), horizon {h}:\n")
         gs = [g for g in GROUPS[1:] if any(k.startswith(g + f"|h{h}|") for k in res)]
         out.append("| model | " + " | ".join(gs) + " |")
         out.append("|---|" + "---|" * len(gs))
         for m in rk:
-            out.append(f"| {m} | " + " | ".join(fmt(res.get(f"{g}|h{h}|{m}", {}).get("skill_timestral-fast"), 2, True) for g in gs) + " |")
+            out.append(f"| {m} | " + " | ".join(fmt(res.get(f"{g}|h{h}|{m}", {}).get("skill_timestral-official"), 2, True) for g in gs) + " |")
     return "\n".join(out)
 
 

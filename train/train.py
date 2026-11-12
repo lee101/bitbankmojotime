@@ -23,16 +23,21 @@ def cal_ids(t_abs, k):
 
 
 class Sampler:
-    def __init__(s, P, limit, L, hmax, dev, frac=1.0, seed=0):
+    def __init__(s, P, limit, L, hmax, dev, frac=1.0, seed=0, pool_top=0):
         """limit = first hourly bar index (panel coordinates) no training target may reach."""
         s.L, s.hmax, s.dev, s.t0 = L, hmax, dev, P.t0
         s.logp = torch.tensor(P.logp, dtype=torch.float64, device=dev)
         s.btc = P.ix["BTCUSDT"]
         last = P.T - 1 - P.live[:, ::-1].argmax(1)
         keep = np.ones(len(P.syms), bool)
-        if frac < 1:
+        if pool_top:                                                 # the most liquid symbols over the year before the limit (no look-ahead)
+            vol = P.qv[:, max(limit - 8760, 0):limit].astype(np.float64).sum(1)
             keep[:] = False
-            keep[np.random.default_rng(seed).permutation(len(P.syms))[:max(2, int(round(frac * len(P.syms))))]] = True
+            keep[np.argsort(-vol)[:pool_top]] = True
+        if frac < 1:
+            ki = np.flatnonzero(keep)
+            keep[:] = False
+            keep[np.random.default_rng(seed).permutation(ki)[:max(2, int(round(frac * len(ki))))]] = True
         s.lo, s.n, s.max_target = [], [], -1
         for k in KS:
             lo = P.first + k * L
@@ -42,7 +47,7 @@ class Sampler:
                 s.max_target = max(s.max_target, int((hi + k * hmax)[n > 0].max()))
             s.lo.append(torch.tensor(lo, device=dev)); s.n.append(torch.tensor(n, dtype=torch.float32, device=dev))
         assert s.max_target < limit
-        s.windows = int(sum(float(n.sum()) for n in s.n))
+        s.windows, s.assets = int(sum(float(n.sum()) for n in s.n)), int(keep.sum())
         s.g = torch.Generator(device=dev); s.g.manual_seed(seed)
         s.off = torch.arange(-L, 1, device=dev)
 
@@ -79,8 +84,22 @@ def predict(model, p, a, t, k, dev, bs=2048):
         b = torch.tensor(D.ctx_ret(p, np.full_like(aa, p.ix["BTCUSDT"]), tt, model.L), device=dev) if model.cov else None
         ta = (tt + p.t0) if k == 1 else (tt + p.t0) * 24 + 23
         cal = torch.tensor(cal_ids(ta, k), device=dev) if model.cal else None
-        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=dev == "cuda"):
-            q = model.quantiles(r, b, cal)
+        out.append(model.quantiles(r, b, cal).float().cpu().numpy())   # fp32, the numerics src/bmt.mojo reproduces
+    return np.concatenate(out)
+
+
+@torch.no_grad()
+def predict_sym(model, p, a, t, k, dev, bs=2048):
+    """two passes: quantiles of the series averaged with the mirrored quantiles of its sign-flipped copy (market covariate flipped too)."""
+    model.eval()
+    out = []
+    for i in range(0, len(t), bs):
+        aa, tt = a[i:i + bs], t[i:i + bs]
+        r = torch.tensor(D.ctx_ret(p, aa, tt, model.L), device=dev)
+        b = torch.tensor(D.ctx_ret(p, np.full_like(aa, p.ix["BTCUSDT"]), tt, model.L), device=dev) if model.cov else None
+        ta = (tt + p.t0) if k == 1 else (tt + p.t0) * 24 + 23
+        cal = torch.tensor(cal_ids(ta, k), device=dev) if model.cal else None
+        q = 0.5 * (model.quantiles(r, b, cal) - model.quantiles(-r, -b if model.cov else None, cal).flip(-1))
         out.append(q.float().cpu().numpy())
     return np.concatenate(out)
 
@@ -94,36 +113,47 @@ def train_fold(a, fi, P, evalp, rows, val, dev):
     torch.manual_seed(a.seed + fi)
     hz = (1, 5, 6, 24)
     limit = s_abs - PURGE - VAL - PURGE - P.t0
-    smp = Sampler(P, limit, a.ctx, max(hz), dev, a.frac, a.seed)
-    model = BMT(hz, a.ctx, a.patch, cov=a.cov, cal=a.cal, **SIZES[a.size]).to(dev)
-    opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=0.01, betas=(0.9, 0.98))
+    smp = Sampler(P, limit, a.ctx, max(hz), dev, a.frac, a.seed, a.pool_top)
+    model = BMT(hz, a.ctx, a.patch, cov=a.cov, cal=a.cal, zm=a.zm, **SIZES[a.size]).to(dev)
+    opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=a.wd, betas=(0.9, 0.98))
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda i: min(1, (i + 1) / 300) * 0.5 * (1 + math.cos(math.pi * min(1.0, i / a.steps))))
     lev, sqh = torch.tensor(QLEV, device=dev), model.sqh
     vi = np.flatnonzero(val["hourly"]["fold"] == fi)
     vi = vi[np.random.default_rng(0).permutation(len(vi))[:40000]]
     hj = [hz.index(h) for h in D.TASKS["hourly"]["horizons"]]
     best, best_sd, t0, hist, run = 1e9, None, time.time(), [], 0.0
+    ema = {k: v.detach().clone() for k, v in model.state_dict().items()}
     for it in range(a.steps):
         model.train()
         r, y, b, cal = smp.batch(a.bs, hz, a.cov)
         flip = (torch.rand(len(r), 1, device=dev) < 0.5).float() * 2 - 1    # mirror augmentation (asset and market together)
         with torch.autocast("cuda", dtype=torch.bfloat16, enabled=dev == "cuda"):
             q, sc = model(r * flip, b * flip if a.cov else None, cal if a.cal else None)
-        loss = pinball(q.float(), (y * flip) / (sc * sqh[None, :]), lev)
+        ok = (r != 0).float().mean(1) > 0.5                          # dead or halted series (mostly zero returns) carry no loss
+        ys = ((y * flip) / (sc * sqh[None, :])).clamp(-40, 40)       # a 40-sigma target is a data event, not a forecasting lesson
+        loss = pinball(q.float()[ok], ys[ok], lev)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step(); sched.step()
+        with torch.no_grad():                                        # EMA of the weights (bias-corrected warm-up), what is evaluated and kept
+            dk = min(a.ema, (it + 1) / (it + 10))
+            for k, v in model.state_dict().items():
+                ema[k].mul_(dk).add_(v.detach(), alpha=1 - dk) if v.dtype.is_floating_point else ema[k].copy_(v)
         run = loss.item() if it == 0 else 0.98 * run + 0.02 * loss.item()
         if (it + 1) % a.eval_every == 0 or it + 1 == a.steps:
+            raw = {k: v.detach().clone() for k, v in model.state_dict().items()}
+            model.load_state_dict(ema)
             q = predict(model, evalp["hourly"], val["hourly"]["a"][vi], val["hourly"]["t"][vi], 1, dev)
-            v = float(np.mean([spl(q[:, j], val["hourly"]["y"][vi, n], val["hourly"]["scale"][vi]) for n, j in enumerate(hj)]))
+            model.load_state_dict(raw)
+            vh = [spl(q[:, j], val["hourly"]["y"][vi, n], val["hourly"]["scale"][vi]) for n, j in enumerate(hj)]
+            v = float(np.mean([x / np.sqrt(h) for x, h in zip(vh, D.TASKS["hourly"]["horizons"])]))   # horizons weighted equally
             hist.append((it + 1, round(run, 5), round(v, 5)))
             if v < best:
-                best, best_sd = v, {k: x.detach().clone() for k, x in model.state_dict().items()}
-            print(f"{a.name} {name} step {it + 1} loss {run:.4f} val_sPL {v:.4f} best {best:.4f} {time.time() - t0:.0f}s", flush=True)
+                best, best_sd = v, {k: x.clone() for k, x in ema.items()}
+            print(f"{a.name} {name} step {it + 1} loss {run:.4f} val_sPL {v:.4f} {[round(x, 4) for x in vh]} best {best:.4f} {time.time() - t0:.0f}s", flush=True)
     model.load_state_dict(best_sd)
-    meta = dict(fold=name, params=n_params(model), windows=smp.windows, max_target_bar_abs=smp.max_target + P.t0, train_limit_abs=limit + P.t0,
+    meta = dict(fold=name, params=n_params(model), windows=smp.windows, assets=smp.assets, lr=a.lr, wd=a.wd, pool_top=a.pool_top, max_target_bar_abs=smp.max_target + P.t0, train_limit_abs=limit + P.t0,
                 test_start_abs=s_abs, val_sPL=best, seconds=round(time.time() - t0, 1), hist=hist, cfg=model.cfg, steps=a.steps, bs=a.bs)
     assert meta["max_target_bar_abs"] < s_abs - PURGE
     os.makedirs(os.path.join(D.RUNS, "ckpt"), exist_ok=True)
@@ -132,7 +162,8 @@ def train_fold(a, fi, P, evalp, rows, val, dev):
     for task, k in (("hourly", 1), ("daily", 24)):
         i = np.flatnonzero(rows[task]["fold"] == fi)
         q = predict(model, evalp[task], rows[task]["a"][i], rows[task]["t"][i], k, dev)
-        out[task] = (i, q[:, [hz.index(h) for h in D.TASKS[task]["horizons"]]])
+        hsel = [hz.index(h) for h in D.TASKS[task]["horizons"]]
+        out[task] = (i, q[:, hsel], predict_sym(model, evalp[task], rows[task]["a"][i], rows[task]["t"][i], k, dev)[:, hsel])
         meta["test_sPL_" + task] = [spl(out[task][1][:, n], rows[task]["y"][i, n], rows[task]["scale"][i]) for n in range(len(D.TASKS[task]["horizons"]))]
     return meta, out
 
@@ -148,6 +179,10 @@ if __name__ == "__main__":
     ap.add_argument("--ctx", type=int, default=512)
     ap.add_argument("--patch", type=int, default=16)
     ap.add_argument("--frac", type=float, default=1.0)
+    ap.add_argument("--pool-top", type=int, default=0, help="train on the N most liquid pool symbols (trailing-year quote volume at the training limit)")
+    ap.add_argument("--wd", type=float, default=0.01)
+    ap.add_argument("--zm", action="store_true", help="ablation: force a zero median")
+    ap.add_argument("--ema", type=float, default=0.998)
     ap.add_argument("--cov", action="store_true")
     ap.add_argument("--cal", action="store_true")
     ap.add_argument("--seed", type=int, default=0)
@@ -178,11 +213,13 @@ if __name__ == "__main__":
         val[t] = {k: x[m] for k, x in v.items()}
     folds = [i for i, f in enumerate(D.FOLDS) if f[0] in a.folds.split(",")]
     metas, preds = [], {t: np.full((len(rows[t]["t"]), len(D.TASKS[t]["horizons"]), 21), np.nan, np.float32) for t in D.TASKS}
+    psym = {t: preds[t].copy() for t in D.TASKS}
     for fi in folds:
         meta, out = train_fold(a, fi, P, evalp, rows, val, dev)
         metas.append(meta)
-        for t, (i, q) in out.items():
+        for t, (i, q, qs) in out.items():
             preds[t][i] = q
+            psym[t][i] = qs
         print(a.name, meta["fold"], "params", meta["params"], "val", round(meta["val_sPL"], 4), "test hourly", [round(x, 4) for x in meta["test_sPL_hourly"]],
               "daily", [round(x, 4) for x in meta["test_sPL_daily"]], f"{meta['seconds']}s", flush=True)
         with open(os.path.join(D.RUNS, "lc.jsonl"), "a") as f:
@@ -193,4 +230,6 @@ if __name__ == "__main__":
                 os.makedirs(os.path.join(D.RUNS, "placebo"), exist_ok=True)
                 np.savez(os.path.join(D.RUNS, "placebo", f"{a.name}_{t}.npz"), q=np.sort(preds[t], 2), **rows[t])
             else:
-                D.save_pred(t, a.name, preds[t], dict(params=metas[0]["params"], folds=metas, size=a.size, cov=a.cov, cal=a.cal, steps=a.steps, bs=a.bs))
+                info = dict(params=metas[0]["params"], folds=metas, size=a.size, cov=a.cov, cal=a.cal, steps=a.steps, bs=a.bs)
+                D.save_pred(t, a.name, preds[t], dict(info, passes=1))
+                D.save_pred(t, a.name + "-sym", psym[t], dict(info, passes=2))

@@ -1,0 +1,10 @@
+LICENSE: TBD by owner.
+
+No licence has been granted yet. Until the owner replaces this file, all rights are reserved and this repository must stay private.
+
+Proposed (docs/SCOPE.md, section 2): Apache-2.0 for the code in this repository (MIT as the alternative).
+Not covered by the repository licence, whatever it becomes:
+- result tables derived from Binance Vision archives: CC BY-NC-SA 4.0, attribution "Binance Vision" (Binance Vision Dataset Terms);
+- model weights trained on those archives: CC BY-NC-SA 4.0 research weights, non-commercial;
+- any weights derived from Mistral AI's Timestral-209M: Mistral's "Modified MIT License" with its attribution and revenue clause;
+- Chronos-2 (Amazon): Apache-2.0.

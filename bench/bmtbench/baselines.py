@@ -137,3 +137,45 @@ def garch(p, rows, task, fold_starts, fit_len=8000):
                 cum = (vbar + (per ** k)[None, :] * (v1[:, None] - vbar)).sum(1)
                 out[idx, j] = (np.sqrt(np.maximum(cum, 1e-12)) / 100)[:, None] * tq[None, :]
     return out
+
+
+def seasonal_factor(p, a, m, n, smooth):
+    """causal seasonal volatility factor of asset a with period m bars: fac[u] = mean |r| over the same slot of the previous n
+    periods (optionally averaged with the two neighbouring slots) / mean |r| of all bars of those periods. fac[u] only uses bars
+    <= u - m + 1, so it is known at the origin for every target bar up to m - 1 steps ahead."""
+    ar = np.abs(p.ret[a].astype(np.float64))
+    T = len(ar)
+    pad = (-T) % m
+    c = np.cumsum(np.concatenate([ar, np.zeros(pad)]).reshape(-1, m), 0).reshape(-1)[:T]   # c[i] = |r|[i] + |r|[i-m] + ...
+    s = c.copy()
+    s[n * m:] -= c[:-n * m]                                          # the last n occurrences of the slot, ending at i
+    if smooth:
+        s = (np.roll(s, 1) + s + np.roll(s, -1)) / 3
+    cs = np.concatenate([[0.0], np.cumsum(ar)])
+    fac = np.ones(T)
+    i = np.arange(n * m + m + 2, T)
+    tot = cs[i - m + 2] - cs[i - m + 2 - n * m]                      # every bar of the same n periods (ends at i - m + 1)
+    fac[i] = (s[i - m] / n) / np.maximum(tot / (n * m), 1e-12)
+    return np.clip(fac, 0.25, 4.0)
+
+
+def ewma_seasonal(p, rows, task, lam_f):
+    """EWMA-FHS on returns divided by a causal seasonal volatility factor (hourly: hour of day over the last 90 days; daily: day of
+    week over the last 52 weeks), re-seasonalised over the target bars."""
+    H = TASKS[task]["horizons"]
+    out = np.zeros((len(rows["t"]), len(H), NQ), np.float32)
+    off = np.arange(-CTX + 1, 1)
+    for a in np.unique(rows["a"]):
+        fac = seasonal_factor(p, a, 24, 90, True) if task == "hourly" else seasonal_factor(p, a, 7, 52, False)
+        for f, lam in lam_f.items():
+            idx = np.flatnonzero((rows["a"] == a) & (rows["fold"] == int(f)))
+            for s in chunks(len(idx)):
+                i = idx[s]
+                t = rows["t"][i]
+                x = (p.ret[a][t[:, None] + off[None, :]] / fac[t[:, None] + off[None, :]]).astype(np.float32)
+                sig, nxt = ewma_sigma(x, lam)
+                z = (x / sig)[:, 32:].astype(np.float32)
+                for j, h in enumerate(H):
+                    fh = np.sqrt((fac[t[:, None] + np.arange(1, h + 1)[None, :]] ** 2).mean(1))
+                    out[i, j] = (nxt * fh)[:, None] * np.quantile(hsums(z, h), QLEV, axis=1).T
+    return out
