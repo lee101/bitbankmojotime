@@ -128,10 +128,10 @@ class Bank:
         s.har = torch.tensor(HAR, device=dev)
         s.btc, s.eth = s.ix["BTCUSDT"], s.ix["ETHUSDT"]
 
-    def gather(s, a, t, k, horizons=None, fold=0):
+    def gather(s, a, t, k, horizons=None, fold=0, ctx=L):
         """a, t: LongTensors (symbol index, hourly index of the origin bar); k: bar hours. -> dict(fine, coarse, scal, cal[, y])."""
         g = s.g
-        idx = t[:, None] + k * s.off[None, :]
+        idx = t[:, None] + k * s.off[None, L - ctx:]                    # the last ctx bars (+ the bar before them)
         A = a[:, None]
         lp = g["logp"][A, idx]
         r = (lp[:, 1:] - lp[:, :-1]).float()

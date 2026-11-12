@@ -10,6 +10,8 @@ Owner decisions first (docs/PLAN.md section 7): name, code licence, data policy 
 - [ ] `git log --format='%an %ae' | sort -u` shows only the identity already public in `lee101/bitbank-mojo`.
 - [ ] `git ls-files` reviewed: no data, no trained weights (only `tests/vectors/bmt-t-random`, random weights), no host paths
       that matter, no strategy code or parameters, no keys or key hashes.
+- [ ] `docs/INTEGRATION.md` removed or generalised (it describes a private consumer's interface), and the
+      `rotation-*` schema names checked against what the owner is willing to show.
 - [ ] Legal read of "non-monetized" (Binance Vision terms 4.1) against a README that links bitbank.nz; decide wording.
 - [ ] CI green on GitHub (gitleaks + tests); branch protection on `main`.
 - [ ] Benchmark reproducible from a clean clone: fetch -> prep -> baselines -> train -> score reproduces the leaderboard within

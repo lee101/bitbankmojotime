@@ -2,9 +2,9 @@
 
   python -m train.export2 <ckpt.pt | --random fine=r,hl coarse=r,rv scal=har,vov cal=1 size=t> <out_dir>
 bmt2.bin: 64 int32 (magic 'BMT2', L, P, LC, PC, D, layers, heads, H, cal, n_fine, n_coarse, har, vov, 4 horizons, 0.., fine kinds at
-[20..35], coarse kinds at [36..39]) then float32 tensors: embed, [embed_c], [embed_s with columns in the order har(5), har5(5), vov(1)], pos,
+[20..35], coarse kinds at [36..39], fine channel ids (index into train.bank.FINE) at [44..59]) then float32 tensors: embed, [embed_c], [embed_s with columns in the order har(5), har5(5), vov(1)], pos,
 blocks, nf, [calendar embeddings], head.
-Input block of N rows: fine[N, n_fine, 512], coarse[N, n_coarse, 256], scal[N, n_scalars], cal[N, 3] (float32, channel-major).
+Input block of N rows: fine[N, n_fine, L], coarse[N, n_coarse, 256], scal[N, n_scalars], cal[N, 3] (float32, channel-major).
 """
 import os, struct, sys
 import numpy as np, torch
@@ -42,11 +42,12 @@ def export(m, out):
     c = m.cfg
     os.makedirs(out, exist_ok=True)
     hdr = [0] * 64
-    hdr[:14] = [MAGIC, L, c["patch"], LC, c["patch_c"], c["d"], c["layers"], c["heads"], len(c["horizons"]), int(c["cal"]), len(c["fine"]), len(c["coarse"]),
+    hdr[:14] = [MAGIC, c.get("ctx", L), c["patch"], LC, c["patch_c"], c["d"], c["layers"], c["heads"], len(c["horizons"]), int(c["cal"]), len(c["fine"]), len(c["coarse"]),
                 5 * sum(n in c["scal"] for n in ORDER[:2]), int("vov" in c["scal"])]
     hdr[14:14 + len(c["horizons"])] = c["horizons"]
     hdr[20:20 + len(c["fine"])] = [CODE[KIND[x]] for x in c["fine"]]
     hdr[36:36 + len(c["coarse"])] = [CODE[KIND[x]] for x in c["coarse"]]
+    hdr[44:44 + len(c["fine"])] = [FINE.index(x) for x in c["fine"]]       # channel ids, so a client can build the inputs it knows
     sd = m.state_dict()
     parts = [sd["embed.weight"], sd["embed.bias"]]
     if c["coarse"]:
@@ -71,7 +72,7 @@ def export(m, out):
     b = synth(m)
     with torch.no_grad():
         q = m.quantiles(b).numpy()
-    blk = [b["fine"][:, m.fi].numpy().ravel()]
+    blk = [b["fine"][:, m.fi, -m.L:].numpy().ravel()]
     if c["coarse"]:
         blk.append(b["coarse"][:, m.ci].numpy().ravel())
     if c["scal"]:

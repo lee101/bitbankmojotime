@@ -47,7 +47,12 @@ def score_task(task, only=None):
             for m in summ:
                 summ[m].pop("asset_pin")
                 res[f"{g}|h{h}|{m}"] = summ[m]
-    json.dump(res, open(os.path.join(D.RUNS, f"scores_{task}.json"), "w"))
+    p = os.path.join(D.RUNS, f"scores_{task}.json")
+    if only and os.path.exists(p):                                   # merge: keep the rows of the models that were not rescored
+        old = json.load(open(p))
+        old.update(res)
+        res = old
+    json.dump(res, open(p, "w"))
     return res
 
 
@@ -95,8 +100,10 @@ if __name__ == "__main__":
     for task in D.TASKS:
         if "--cached" in sys.argv:
             res = json.load(open(os.path.join(D.RUNS, f"scores_{task}.json")))
+        elif "--only" in sys.argv:
+            res = score_task(task, sys.argv[sys.argv.index("--only") + 1].split(","))
         else:
             res = score_task(task)
         md.append(tables(task, res, info))
     open(os.path.join(D.RUNS, "leaderboard_tables.md"), "w").write("\n".join(md))
-    print("\n".join(md)[:6000])
+    print(len("\n".join(md)), "chars of tables")

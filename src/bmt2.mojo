@@ -3,6 +3,7 @@
   bmt2 selftest <dir>                     bmt2.bin + selftest_in.f32 vs selftest_ref.f32, exit 1 above tolerance
   bmt2 bench <bmt2.bin> <batch> <iters> [threads]
   bmt2 serve <bmt2.bin> [threads]         stdin: int32 rows, then the input block; stdout: int32 rows, rows*H*21 float32
+  bmt2 rotation <bmt2.bin> <history.json> scores for a rotation consumer from its hourly candle history (docs/INTEGRATION.md)
 
 Input block of N rows (float32, channel-major, layout written by train/export2.py): fine[N, n_fine, 512], coarse[N, n_coarse, 256],
 scal[N, n_scalars], cal[N, 3]. Channel kinds: 0 RET, 1 POS, 2 VOL, 3 SHR, 4 XRT, 5 RAW. BMT_SYM=1 selects the flip-averaged forecast.
@@ -564,6 +565,152 @@ def serve(path: String, threads: Int) raises:
         fd_write(1, bo.unsafe_ptr().unsafe_bitcast[UInt8]().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), n * cfg[C_H] * NQ * 4)
 
 
+def find5(p: Pointer[UInt8, MutAnyOrigin], n: Int, a: Int, b: Int, c: Int, d: Int, e: Int) -> Int:
+    """Index just after the '[' that follows the JSON key spelled by the five bytes a..e, or -1."""
+    for i in range(n - 8):
+        if Int(p[i]) == 34 and Int(p[i + 1]) == a and Int(p[i + 2]) == b and Int(p[i + 3]) == c and Int(p[i + 4]) == d and Int(p[i + 5]) == e and Int(p[i + 6]) == 34:
+            var j = i + 7
+            while j < n and Int(p[j]) != 91:
+                j += 1
+            return j + 1
+    return -1
+
+
+def numbers(p: Pointer[UInt8, MutAnyOrigin], n: Int, start: Int, mut vals: List[Float64]) raises -> Int:
+    """Every number of the (possibly nested) JSON array that starts at `start`; returns the index after its closing bracket."""
+    var depth = 1
+    var i = start
+    var tok = String("")
+    while i < n and depth > 0:
+        var ch = Int(p[i])
+        var isnum = (ch >= 48 and ch <= 57) or ch == 45 or ch == 43 or ch == 46 or ch == 101 or ch == 69
+        if isnum:
+            tok += chr(ch)
+        else:
+            if tok.byte_length() > 0:
+                vals.append(atof(tok))
+                tok = String("")
+            if ch == 91:
+                depth += 1
+            elif ch == 93:
+                depth -= 1
+        i += 1
+    return i
+
+
+def fmt(v: List[Float64]) -> String:
+    var s = String("[")
+    for i in range(len(v)):
+        if i > 0:
+            s += ", "
+        s += String(v[i])
+    return s + "]"
+
+
+def rotation(wpath: String, hpath: String, threads: Int) raises:
+    """Scores for a rotation consumer from its own candle history file (schema rotation-completed-history-v1:
+    {"pairs": [...], "hours": [...], "ohlcv": [[[open, high, low, close, volume] per pair] per hour]}), printed as one JSON object."""
+    var cfg = List[Int]()
+    var w = List[Float32]()
+    load_model(wpath, cfg, w)
+    var wf = open(wpath, "r")
+    var wb = wf.read_bytes()
+    var hp = wb.unsafe_ptr().unsafe_bitcast[Int32]()
+    var L = cfg[C_L]
+    if cfg[C_NCC] != 0 or cfg[C_NS] != 0:
+        raise Error("this model needs coarse / scalar inputs that a candle history file does not provide")
+    for c in range(cfg[C_NFC]):
+        if Int(hp[44 + c]) > 3:
+            raise Error("this model needs input channels beyond return / range / Garman-Klass / volume")
+    var f = open(hpath, "r")
+    var bytes = f.read_bytes()
+    var n = len(bytes)
+    var p = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+    var ip_ = find5(p, n, 112, 97, 105, 114, 115)
+    var ih = find5(p, n, 104, 111, 117, 114, 115)
+    var io = find5(p, n, 111, 104, 108, 99, 118)
+    if ip_ < 0 or ih < 0 or io < 0:
+        raise Error("history file: pairs / hours / ohlcv not found")
+    var pairs = String("[")
+    var npair = 0
+    var i = ip_
+    while Int(p[i]) != 93:
+        if Int(p[i]) == 34:
+            npair += 1
+        pairs += chr(Int(p[i]))
+        i += 1
+    pairs += "]"
+    npair = npair // 2
+    var hv = List[Float64]()
+    _ = numbers(p, n, ih, hv)
+    var ov = List[Float64]()
+    _ = numbers(p, n, io, ov)
+    var nh = len(hv)
+    if len(ov) != nh * npair * 5:
+        raise Error("history file: ohlcv has " + String(len(ov)) + " numbers, expected hours x pairs x 5 = " + String(nh * npair * 5))
+    if nh < L + 1:
+        raise Error("history file has " + String(nh) + " hours; this model needs " + String(L + 1) + " completed hourly candles per pair")
+    for k in range(nh - L, nh):
+        if Int(hv[k]) != Int(hv[k - 1]) + 1:
+            raise Error("history file: the last " + String(L + 1) + " hours are not consecutive")
+    var hr = Int(hv[nh - 1])
+    var rowin = cfg[C_ROWIN]
+    var nfc = cfg[C_NFC]
+    var xin = List[Float32](length=npair * rowin, fill=0)
+    for j in range(npair):
+        for t in range(L):
+            var a = ((nh - L + t) * npair + j) * 5
+            var b = ((nh - L + t - 1) * npair + j) * 5
+            if ov[a + 3] <= 0 or ov[b + 3] <= 0 or ov[a + 2] <= 0 or ov[a + 1] < ov[a + 2]:
+                raise Error("history file: non-positive or inconsistent candle")
+            var r = Float32(log(ov[a + 3] / ov[b + 3]))
+            var hl = Float32(log(ov[a + 1] / ov[a + 2]))
+            for c in range(nfc):
+                var id = Int(hp[44 + c])
+                var v = r
+                if id == 1:
+                    v = hl
+                elif id == 2:
+                    v = sqrt(max(Float32(0.5) * hl * hl - Float32(0.3862944) * r * r, Float32(0)))
+                elif id == 3:
+                    v = Float32(ov[a + 4])
+                xin[(j * nfc + c) * L + t] = v
+        if cfg[C_CAL] != 0:
+            var base = npair * nfc * L + j * 3
+            xin[base] = Float32((hr + 1) % 24)
+            xin[base + 1] = Float32(((hr + 1) // 24 + 4) % 7)
+            xin[base + 2] = 0
+    var HQ = cfg[C_H] * NQ
+    var q = List[Float32](length=npair * HQ, fill=0)
+    infer(cfg, w, fp(xin), fp(q), npair, threads, use_sym())
+    var hsel = cfg[C_H] - 1                                            # the longest horizon (24 bars)
+    var med = List[Float64]()
+    var sig = List[Float64]()
+    var q05 = List[Float64]()
+    var q95 = List[Float64]()
+    var sc = List[Float64]()
+    var mean = Float64(0)
+    for j in range(npair):
+        var o = j * HQ + hsel * NQ
+        med.append(Float64(q[o + 10]))
+        sig.append(Float64(q[o + 17] - q[o + 3]) / 2.0728)             # (q85 - q15) / (2 x 1.0364)
+        q05.append(Float64(q[o + 1]))
+        q95.append(Float64(q[o + 19]))
+        sc.append(med[j] / max(sig[j], 1e-12))
+        mean += sc[j]
+    mean = mean / Float64(npair)
+    var sd = Float64(0)
+    for j in range(npair):
+        sd += (sc[j] - mean) * (sc[j] - mean)
+    sd = sqrt(sd / Float64(max(npair - 1, 1)))
+    for j in range(npair):
+        sc[j] = (sc[j] - mean) / max(sd, 1e-12)
+    print("{\"schema\": \"bmt-rotation-forecast-v1\", \"pairs\": " + pairs + ", \"issued_hour\": " + String(hr) + ", \"usable_execution_hour\": " + String(hr + 1)
+          + ", \"horizon_hours\": " + String(cfg[C_HZ + hsel]) + ", \"raw_scores\": " + fmt(sc) + ", \"median_logret\": " + fmt(med) + ", \"sigma_logret\": " + fmt(sig)
+          + ", \"q05_logret\": " + fmt(q05) + ", \"q95_logret\": " + fmt(q95) + ", \"flip_averaged\": " + ("true" if use_sym() else "false")
+          + ", \"warning\": \"Ranks, not expected returns. Research inference only; no orders or fills.\"}")
+
+
 def main() raises:
     var a = argv()
     if len(a) >= 3 and a[1] == "selftest":
@@ -573,5 +720,7 @@ def main() raises:
         bench(String(a[2]), Int(a[3]), Int(a[4]), Int(a[5]) if len(a) > 5 else 1)
     elif len(a) >= 3 and a[1] == "serve":
         serve(String(a[2]), Int(a[3]) if len(a) > 3 else 1)
+    elif len(a) >= 4 and a[1] == "rotation":
+        rotation(String(a[2]), String(a[3]), Int(a[4]) if len(a) > 4 else 1)
     else:
-        print("usage: bmt2 selftest <dir> | bench <bmt2.bin> <batch> <iters> [threads] | serve <bmt2.bin> [threads]")
+        print("usage: bmt2 selftest <dir> | bench <bmt2.bin> <batch> <iters> [threads] | serve <bmt2.bin> [threads] | rotation <bmt2.bin> <history.json> [threads]")

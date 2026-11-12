@@ -47,15 +47,16 @@ def norm_stream(x, names):
 
 
 class BMT2(nn.Module):
-    def __init__(s, fine=("r",), coarse=(), scal=(), cal=False, horizons=(1, 5, 6, 24), patch=16, patch_c=16, d=128, layers=4, heads=4):
+    def __init__(s, fine=("r",), coarse=(), scal=(), cal=False, horizons=(1, 5, 6, 24), patch=16, patch_c=16, d=128, layers=4, heads=4, ctx=L):
         super().__init__()
         assert fine[0] == "r" and (not coarse or coarse[0] == "r")
-        s.cfg = dict(fine=list(fine), coarse=list(coarse), scal=list(scal), cal=cal, horizons=list(horizons), patch=patch, patch_c=patch_c, d=d, layers=layers, heads=heads)
+        s.cfg = dict(fine=list(fine), coarse=list(coarse), scal=list(scal), cal=cal, horizons=list(horizons), patch=patch, patch_c=patch_c, d=d, layers=layers, heads=heads, ctx=ctx)
+        s.L = ctx
         s.fine, s.coarse, s.scal, s.cal, s.p, s.pc, s.H = list(fine), list(coarse), list(scal), cal, patch, patch_c, len(horizons)
         s.fi, s.ci = [FINE.index(n) for n in fine], [COARSE.index(n) for n in coarse]
         s.register_buffer("sqh", torch.tensor([math.sqrt(h) for h in horizons]))
         s.embed = nn.Linear(patch * sum(NF[KIND[n]] for n in fine), d)
-        s.nt = L // patch + (LC // patch_c if coarse else 0) + (1 if scal else 0)
+        s.nt = ctx // patch + (LC // patch_c if coarse else 0) + (1 if scal else 0)
         if coarse:
             s.embed_c = nn.Linear(patch_c * sum(NF[KIND[n]] for n in coarse), d)
         if scal:
@@ -88,8 +89,8 @@ class BMT2(nn.Module):
     def forward(s, b):
         """b: dict from Bank.gather -> (q_scaled[N, H, 21] in units of s * sqrt(h), s[N, 1])."""
         N = b["fine"].shape[0]
-        f, sc = norm_stream(b["fine"][:, s.fi].float(), s.fine)
-        toks = [s.embed(f.reshape(N, L // s.p, -1))]
+        f, sc = norm_stream(b["fine"][:, s.fi, -s.L:].float(), s.fine)
+        toks = [s.embed(f.reshape(N, s.L // s.p, -1))]
         if s.coarse:
             fc, _ = norm_stream(b["coarse"][:, s.ci].float(), s.coarse)
             toks.insert(0, s.embed_c(fc.reshape(N, LC // s.pc, -1)))

@@ -1,10 +1,110 @@
 {
- "naive": {"params": "0"}, "drift": {"params": "0"}, "empirical": {"params": "0"}, "seasonal-naive": {"params": "0"},
- "ewma": {"params": "1"}, "ewma-seasonal": {"params": "1"}, "garch": {"params": "4 / asset"},
- "autoets": {"params": "fit"}, "autoarima": {"params": "fit"},
- "chronos-2": {"params": "120M"}, "chronos-2-ret": {"params": "120M"},
- "timestral-fast": {"params": "209M"}, "timestral-max": {"params": "209M"}, "timestral-official": {"params": "209M"}, "timestral-official-2048": {"params": "209M"},
- "bmt-t": {"params": "0.11M"}, "bmt-t-sym": {"params": "0.11M"}, "bmt-s": {"params": "0.81M"}, "bmt-s-sym": {"params": "0.81M"},
- "bmt-s-x": {"params": "0.82M"}, "bmt-s-x-sym": {"params": "0.82M"}, "bmt-m": {"params": "4.8M"}, "bmt-m-sym": {"params": "4.8M"},
- "ens-bmt-s-sym+timestral-official": {"params": "0.81M + 209M"}
+ "naive": {
+  "params": "0"
+ },
+ "drift": {
+  "params": "0"
+ },
+ "empirical": {
+  "params": "0"
+ },
+ "seasonal-naive": {
+  "params": "0"
+ },
+ "ewma": {
+  "params": "1"
+ },
+ "ewma-seasonal": {
+  "params": "1"
+ },
+ "garch": {
+  "params": "4 / asset"
+ },
+ "autoets": {
+  "params": "fit"
+ },
+ "autoarima": {
+  "params": "fit"
+ },
+ "chronos-2": {
+  "params": "120M"
+ },
+ "chronos-2-ret": {
+  "params": "120M"
+ },
+ "timestral-fast": {
+  "params": "209M"
+ },
+ "timestral-max": {
+  "params": "209M"
+ },
+ "timestral-official": {
+  "params": "209M"
+ },
+ "timestral-official-2048": {
+  "params": "209M"
+ },
+ "bmt-t": {
+  "params": "0.11M"
+ },
+ "bmt-t-sym": {
+  "params": "0.11M"
+ },
+ "bmt-s": {
+  "params": "0.81M"
+ },
+ "bmt-s-sym": {
+  "params": "0.81M"
+ },
+ "bmt-s-x": {
+  "params": "0.82M"
+ },
+ "bmt-s-x-sym": {
+  "params": "0.82M"
+ },
+ "bmt-m": {
+  "params": "4.8M"
+ },
+ "bmt-m-sym": {
+  "params": "4.8M"
+ },
+ "ens-bmt-s-sym+timestral-official": {
+  "params": "0.81M + 209M"
+ },
+ "bmt2-base": {
+  "params": "0.81M"
+ },
+ "bmt2-base-sym": {
+  "params": "0.81M"
+ },
+ "bmt2-ohlc": {
+  "params": "0.82M"
+ },
+ "bmt2-ohlc-sym": {
+  "params": "0.82M"
+ },
+ "bmt2-ohlc+cal": {
+  "params": "0.82M"
+ },
+ "bmt2-ohlc+cal-sym": {
+  "params": "0.82M"
+ },
+ "bmt2-ohlc+cal@t": {
+  "params": "0.12M"
+ },
+ "bmt2-ohlc+cal@t-sym": {
+  "params": "0.12M"
+ },
+ "bmt2-syn-ohlc+cal": {
+  "params": "0.82M, synthetic data only"
+ },
+ "bmt2-syn-ohlc+cal-sym": {
+  "params": "0.82M, synthetic data only"
+ },
+ "bmt2-syn-ohlc+cal@t": {
+  "params": "0.12M, synthetic data only"
+ },
+ "bmt2-syn-ohlc+cal@t-sym": {
+  "params": "0.12M, synthetic data only"
+ }
 }

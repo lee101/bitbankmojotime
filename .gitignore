@@ -18,3 +18,4 @@ __pycache__/
 # small self-test vectors of a RANDOM-weight model (no trained weights in git)
 !tests/vectors/**/*.f32
 !tests/vectors/**/*.bin
+models/*/weights/
