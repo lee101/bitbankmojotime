@@ -72,13 +72,21 @@ def extra_md():
 
 
 def search_md():
-    S = json.load(open(os.path.join(R, "search", "summary.json")))
-    out = [f"{S['trials']} configurations tried in {S['rounds']} rounds, {S['gpu_hours']:.2f} GPU-hours; stop reason: {S.get('stop', '?')}. Full ledger: `docs/RESEARCH_LOG.md`.", "",
-           "| step | config | validation objective | paired validation improvement over the previous incumbent, % (95 %) |", "|---|---|---|---|"]
-    for i, c in enumerate(S["chain"]):
-        cs = "; ".join(f"{k.replace('|', ' ')} {100 * v[0]:+.2f} [{100 * v[1]:+.2f}, {100 * v[2]:+.2f}]" for k, v in c["cmp"].items()) if c.get("cmp") else "(baseline: returns only)"
-        out.append(f"| {i} | `{c['name']}` | {c['obj']:.5f} | {cs} |")
-    return "\n".join(out)
+    out = []
+    for wave, d, what in ((1, "search", "inputs from the hourly archive, all 350 pool symbols, objective sPL"),
+                          (2, "search2", "5-minute realised measures, peers, BTC range; 64 evaluation symbols, trained on the 47 seen; objective sPL"),
+                          (3, "search3", "ranking objective: validation rank IC of the median, grouped batches, correlation loss; inputs again")):
+        p = os.path.join(R, d, "summary.json")
+        if not os.path.exists(p):
+            continue
+        S = json.load(open(p))
+        unit = "IC points x 100" if wave == 3 else "%"
+        out += [f"\nWave {wave} ({what}): {S['trials']} configurations in {S['rounds']} rounds, {S['gpu_hours']:.2f} GPU-hours; stop: {S.get('stop', '?')}; final `{S.get('final', '?')}`.", "",
+                f"| step | config | validation objective | paired validation improvement over the previous incumbent, {unit} (95 %) |", "|---|---|---|---|"]
+        for i, c in enumerate(S["chain"]):
+            cs = "; ".join(f"{k.replace('|', ' ')} {100 * v[0]:+.2f} [{100 * v[1]:+.2f}, {100 * v[2]:+.2f}]" for k, v in c["cmp"].items()) if c.get("cmp") else "(starting point)"
+            out.append(f"| {i} | `{c['name']}` | {c['obj']:.5f} | {cs} |")
+    return "\n".join(out) + "\n\nEvery trial, including the ones that lost: `docs/RESEARCH_LOG.md`."
 
 
 def lc2_md():
@@ -110,7 +118,7 @@ def read(name):
 if __name__ == "__main__":
     info = json.load(open(os.path.join(D.REPO, "bench", "models.json")))
     tabs = "\n".join(tables(t, json.load(open(os.path.join(R, f"scores_{t}.json"))), info) for t in D.TASKS)
-    HEAD = HEAD.replace("{{SEARCH}}", search_md()).replace("{{LC2}}", lc2_md()).replace("{{PLACEBO2}}", placebo2_md()).replace("{{TRADABLE}}", read("tradable.md")).replace("{{VOLTIMING}}", read("voltiming.md"))
+    HEAD = HEAD.replace("{{SEARCH}}", search_md()).replace("{{LC2}}", lc2_md()).replace("{{PLACEBO2}}", placebo2_md()).replace("{{TRADABLE}}", read("tradable.md")).replace("{{VOLTIMING}}", read("voltiming.md")).replace("{{AB}}", read("ab.md")).replace("{{PAIRED}}", read("paired.md"))
     md = HEAD.replace("{{EXTRA}}", extra_md()).replace("{{SPEED}}", speed_md()).replace("{{LC}}", lc_md()).replace("{{PLACEBO}}", placebo_md()).replace("{{TABLES}}", tabs)
     open(os.path.join(D.REPO, "bench", "LEADERBOARD.md"), "w").write(md)
     print(len(md), "chars")

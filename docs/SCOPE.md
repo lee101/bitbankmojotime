@@ -88,8 +88,20 @@ Consequences for this project:
 - Public weights, tier A ("research"): trained on Binance Vision data, CC BY-NC-SA 4.0, labelled non-commercial.
 - Public weights, tier B ("permissive") and anything the bots use: trained on synthetic data plus data the owner holds commercial
   rights to; Apache-2.0 or MIT. This tier does not exist yet; see `docs/PLAN.md`.
-- Repo code licence: Apache-2.0 proposed (patent grant, NOTICE mechanism for the third-party attributions above); MIT is the
-  alternative if the owner prefers symmetry with the two `mojo-*` repos. `LICENSE` is a placeholder until the owner decides.
+- Repo code licence: Apache-2.0 (`LICENSE` and `NOTICE` were set in commit 6e6ba68; before that this file proposed it).
+
+### Bot-usable tier: which data could a trading bot's weights be trained on (2026-11-12, second pass)
+
+Checked without calling any exchange API from this host; "not established" means exactly that.
+
+| route | finding |
+|---|---|
+| Synthetic bars from a simulator whose parameters come from priors, not from a dataset | Clean. Used: `models/permissive/`, cost 0.2-0.6 % sPL against the research weights. Caveat: the input list was chosen with validation on Binance Vision data; the weights hold none of it. |
+| Candles a bot collected itself from Poloniex public endpoints (the rotation job's source) | Not established: the terms page returned no text. Not used. |
+| Candles collected from KuCoin public endpoints | KuCoin Terms of Use Art. 90-92 bar commercial use of, derivatives of, and systematic collection of platform content; no separate API licence found. Treated as not cleared. |
+| Binance | Vision archives: non-commercial (above). Live-API terms not read from this host. |
+| Public corpora on Hugging Face | Per-subset licences not checked; none used. |
+| A purchased commercial market-data licence | Would clear real-data training; owner decision. |
 
 ## 3. Existing kernels and what limits speed
 

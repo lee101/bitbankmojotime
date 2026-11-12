@@ -1,6 +1,6 @@
 # Contributing
 
-Status: private pre-release. The licence is not chosen yet (`LICENSE`), so outside contributions cannot be accepted until it is.
+Status: private pre-release (code under Apache-2.0, see `LICENSE` / `NOTICE`); outside contributions open once the repository is public.
 
 ## Ground rules
 
