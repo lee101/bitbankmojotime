@@ -19,3 +19,4 @@ __pycache__/
 !tests/vectors/**/*.f32
 !tests/vectors/**/*.bin
 models/*/weights/
+runs-agent/

@@ -2,6 +2,8 @@
 """Write docs/RESEARCH_LOG.md from runs/search/ledger.jsonl + runs/search/summary.json (header text in docs/research_log_head.md)."""
 import json, os
 R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RUNS = os.environ.get("BMT_RUNS", os.path.join(R, "runs"))
+OUT = os.environ.get("BMT_REPORT_DIR", os.path.join(R, "docs"))
 IDEA = {"ohlc": "bar range (log high/low) and Garman-Klass sigma per bar", "vol": "quote volume per bar", "tb": "taker-buy share per bar", "rvf": "realised sigma of each bar from hourly returns",
         "har": "long-memory scalars: RMS of hourly returns over 1 d / 1 w / 30 d / 90 d / 250 d", "vov": "vol-of-vol scalar (std of log daily RV, 30 d)",
         "coarse": "second token stream: 256 daily bars (return, realised sigma)", "coarse4": "daily token stream with return, realised sigma, range, volume",
@@ -25,15 +27,16 @@ def fmt(rows):
     return out
 
 
-IDEA.update(rv5="realised sigma of each bar from 5-minute returns", rsn="share of the bar's 5-minute variance from negative returns", har5="long-memory scalars from 5-minute realised variance",
+IDEA.update(ic10="ranking loss: within-origin correlation of median and outcome, weight 0.1", ic30="ranking loss, weight 0.3", rv5="realised sigma of each bar from 5-minute returns", rsn="share of the bar's 5-minute variance from negative returns", har5="long-memory scalars from 5-minute realised variance",
             peer="mean return of the 5 most correlated training symbols", bvol="BTC bar range on the same bars")
-out = [open(os.path.join(R, "docs", "research_log_head.md")).read().rstrip()]
-for wave, d in ((1, "search"), (2, "search2")):
-    if not os.path.exists(os.path.join(R, "runs", d, "summary.json")):
+hp = os.path.join(OUT, "research_log_head.md")
+out = [open(hp if os.path.exists(hp) else os.path.join(R, "docs", "research_log_head.md")).read().rstrip()]
+for wave, d in ((1, "search"), (2, "search2"), (3, "search3")):
+    if not os.path.exists(os.path.join(RUNS, d, "summary.json")):
         continue
-    rows = [json.loads(l) for l in open(os.path.join(R, "runs", d, "ledger.jsonl"))]
-    S = json.load(open(os.path.join(R, "runs", d, "summary.json")))
+    rows = [json.loads(l) for l in open(os.path.join(RUNS, d, "ledger.jsonl"))]
+    S = json.load(open(os.path.join(RUNS, d, "summary.json")))
     out += ["", f"## Wave {wave}", "", f"Trials: {S['trials']} configurations, {S['gpu_hours']:.2f} GPU-hours, {S['rounds']} rounds. Stop reason: {S.get('stop', 'running')}. Final inputs: `{S.get('final', '?')}`.", "",
             "| # | round | stage | config | idea added | folds | steps | validation objective | vs incumbent at that stage % | paired improvement % by (task, horizon), 95 % | result |", "|---|---|---|---|---|---|---|---|---|---|---|"]
     out += fmt(rows)
-open(os.path.join(R, "docs", "RESEARCH_LOG.md"), "w").write("\n".join(out) + "\n")
+open(os.path.join(OUT, "RESEARCH_LOG.md"), "w").write("\n".join(out) + "\n")

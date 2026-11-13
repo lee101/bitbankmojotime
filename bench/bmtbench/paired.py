@@ -13,7 +13,7 @@ def run(models, refs):
     for task in D.TASKS:
         rows, cfg = D.load_rows(task), D.TASKS[task]
         blk = rows["t_abs"] // cfg["block"]
-        P = {m: np.load(D.pred_path(task, m), mmap_mode="r") for m in set(models) | set(refs) if os.path.exists(D.pred_path(task, m))}
+        P = {m: D.open_pred(task, m) for m in set(models) | set(refs) if (m in D.models_of(task))}
         for g, mk in (("all", np.ones(len(blk), bool)), ("unseen", rows["unseen"]), ("F4", rows["fold"] == 3)):
             boot = Boot(rows["a"][mk], blk[mk])
             for j, h in enumerate(cfg["horizons"]):
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     ap.add_argument("--models", required=True)
     ap.add_argument("--refs", default="timestral-official,timestral-official-2048,garch,timestral-fast,bmt-s-sym")
     a = ap.parse_args()
-    ms, rs = a.models.split(","), a.refs.split(",")
+    ms, rs = [D.resolve(x) for x in a.models.split(",")], [D.resolve(x) for x in a.refs.split(",")]
     out = run(ms, rs)
     json.dump(out, open(os.path.join(D.RUNS, "paired.json"), "w"), indent=1)
     open(os.path.join(D.RUNS, "paired.md"), "w").write(table(out, ms, rs))

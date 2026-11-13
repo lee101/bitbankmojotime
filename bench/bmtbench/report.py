@@ -4,7 +4,8 @@ from . import data as D
 from .score import tables
 
 R = D.RUNS
-HEAD = open(os.path.join(D.REPO, "bench", "leaderboard_head.md")).read()
+OUTDIR = os.environ.get("BMT_REPORT_DIR", os.path.join(D.REPO, "agent"))   # this branch writes its report under agent/
+HEAD = open(os.path.join(OUTDIR, "leaderboard_head.md")).read()
 
 
 def f3(x, k=100, d=2):
@@ -110,15 +111,24 @@ def placebo2_md():
     return "\n".join(out)
 
 
+def rows_md():
+    reg = D.registry()
+    out = ["| row | tier | parameters | passes | model hash (config + fold checkpoints) |", "|---|---|---|---|---|"]
+    for m, e in sorted(reg.items()):
+        if "model_hash" in e:
+            out.append(f"| `{m}` | {e.get('tier', '')} | {e.get('params', '')} | {e.get('passes', 1)} | `{e['model_hash'][:16]}` |")
+    return "\n".join(out)
+
+
 def read(name):
     p = os.path.join(R, name)
     return open(p).read() if os.path.exists(p) else "(not run)"
 
 
 if __name__ == "__main__":
-    info = json.load(open(os.path.join(D.REPO, "bench", "models.json")))
+    info = D.registry()
     tabs = "\n".join(tables(t, json.load(open(os.path.join(R, f"scores_{t}.json"))), info) for t in D.TASKS)
-    HEAD = HEAD.replace("{{SEARCH}}", search_md()).replace("{{LC2}}", lc2_md()).replace("{{PLACEBO2}}", placebo2_md()).replace("{{TRADABLE}}", read("tradable.md")).replace("{{VOLTIMING}}", read("voltiming.md")).replace("{{AB}}", read("ab.md")).replace("{{PAIRED}}", read("paired.md"))
+    HEAD = HEAD.replace("{{ROWS}}", rows_md()).replace("{{SEARCH}}", search_md()).replace("{{LC2}}", lc2_md()).replace("{{PLACEBO2}}", placebo2_md()).replace("{{TRADABLE}}", read("tradable.md")).replace("{{VOLTIMING}}", read("voltiming.md")).replace("{{AB}}", read("ab.md")).replace("{{PAIRED}}", read("paired.md"))
     md = HEAD.replace("{{EXTRA}}", extra_md()).replace("{{SPEED}}", speed_md()).replace("{{LC}}", lc_md()).replace("{{PLACEBO}}", placebo_md()).replace("{{TABLES}}", tabs)
-    open(os.path.join(D.REPO, "bench", "LEADERBOARD.md"), "w").write(md)
+    open(os.path.join(OUTDIR, "LEADERBOARD.md"), "w").write(md)
     print(len(md), "chars")

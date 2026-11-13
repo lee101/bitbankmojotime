@@ -205,3 +205,68 @@ def shuffle_time(p, seed=0):
                 r[i0:i1] = r[i0:i1][rng.permutation(i1 - i0)]
         logp[a, f:l + 1] = p.logp[a, f] + np.concatenate([[0.0], np.cumsum(r)])
     return Panel(p.syms, p.t0, logp, np.isfinite(logp), p.qv)
+
+
+# --- model registry: every leaderboard row is tied to the content hash of its prediction files (and, for learned models, of its
+# config + checkpoints). Table generators load predictions only through open_pred, which refuses a file that does not match its row.
+REG = os.environ.get("BMT_REGISTRY", os.path.join(REPO, "agent", "models.json"))
+_SHA = {}
+
+
+def file_sha(path):
+    st = os.stat(path)
+    k = (path, st.st_size, st.st_mtime_ns)
+    if k not in _SHA:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for b in iter(lambda: f.read(1 << 22), b""):
+                h.update(b)
+        _SHA[k] = h.hexdigest()
+    return _SHA[k]
+
+
+def registry():
+    return json.load(open(REG)) if os.path.exists(REG) else {}
+
+
+def register(task, model, **extra):
+    """record (or update) the registry entry of a model row after its prediction file was written."""
+    reg = registry()
+    e = reg.setdefault(model, {})
+    e.setdefault("pred_sha256", {})[task] = file_sha(pred_path(task, model))
+    e.update(extra)
+    os.makedirs(os.path.dirname(REG), exist_ok=True)
+    json.dump(reg, open(REG, "w"), indent=1, sort_keys=True)
+
+
+def models_of(task):
+    return sorted(m for m, e in registry().items() if task in e.get("pred_sha256", {}))
+
+
+def open_pred(task, model):
+    e = registry().get(model)
+    if e is None or task not in e.get("pred_sha256", {}):
+        raise RuntimeError(f"{model} ({task}) is not a registered model row")
+    p = pred_path(task, model)
+    if not os.path.exists(p) or file_sha(p) != e["pred_sha256"][task]:
+        raise RuntimeError(f"prediction file of {model} ({task}) does not match its registered hash: refusing to use it")
+    return np.load(p, mmap_mode="r")
+
+
+def model_hash(cfg, ckpt_paths):
+    """content hash of a learned model: its config and the bytes of its fold checkpoints."""
+    h = hashlib.sha256(json.dumps(cfg, sort_keys=True).encode())
+    for p in sorted(ckpt_paths):
+        h.update(file_sha(p).encode())
+    return h.hexdigest()
+
+
+def resolve(name):
+    """registered row for a short name: the name itself, or the unique row '<name>~<hash>'."""
+    reg = registry()
+    if name in reg:
+        return name
+    c = [m for m in reg if m.startswith(name + "~")]
+    if len(c) != 1:
+        raise RuntimeError(f"{name}: {len(c)} registered rows match")
+    return c[0]

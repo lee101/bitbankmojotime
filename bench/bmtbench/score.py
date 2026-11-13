@@ -22,10 +22,10 @@ def score_task(task, only=None):
     rows = D.load_rows(task)
     cfg = D.TASKS[task]
     block = rows["t_abs"] // cfg["block"]
-    models = sorted(os.path.basename(f)[:-4] for f in glob.glob(os.path.join(D.RUNS, "preds", task, "*.npy")))
+    models = D.models_of(task)                                      # registered rows only; each file is hash-checked on load
     if only:
         models = [m for m in models if m in only or m in REFS]
-    preds = {m: np.load(D.pred_path(task, m), mmap_mode="r") for m in models}
+    preds = {m: D.open_pred(task, m) for m in models}
     preds = {m: q for m, q in preds.items() if q.shape[0] == len(rows["t"])}
     res = {}
     for g, mk in masks(rows).items():
@@ -95,7 +95,7 @@ def tables(task, res, info):
 
 
 if __name__ == "__main__":
-    info = json.load(open(os.path.join(D.REPO, "bench", "models.json"))) if os.path.exists(os.path.join(D.REPO, "bench", "models.json")) else {}
+    info = D.registry()
     md = []
     for task in D.TASKS:
         if "--cached" in sys.argv:

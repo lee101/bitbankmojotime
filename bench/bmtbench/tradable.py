@@ -15,7 +15,7 @@ from . import data as D
 from .metrics import Boot, ci
 
 COSTS = (0.0, 4e-4, 20e-4)
-DEFAULT = ["bmt-t", "bmt-s-sym", "timestral-official", "timestral-official-2048", "timestral-max", "timestral-fast", "chronos-2-ret", "chronos-2"]
+DEFAULT = ["bmt-t", "bmt-s-sym", "timestral-official", "timestral-official-2048", "timestral-max", "timestral-fast", "chronos-2-ret", "chronos-2"]   # short names are resolved through the registry
 
 
 def rank(x):
@@ -46,9 +46,9 @@ def run(models):
     for task in D.TASKS:
         rows, cfg = D.load_rows(task), D.TASKS[task]
         for m in models:
-            if not os.path.exists(D.pred_path(task, m)):
+            if not (m in D.models_of(task)):
                 continue
-            q = np.load(D.pred_path(task, m), mmap_mode="r")
+            q = D.open_pred(task, m)
             for j, h in enumerate(cfg["horizons"]):
                 if j >= q.shape[1]:
                     continue
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", default=",".join(DEFAULT))
     a = ap.parse_args()
-    out = run(a.models.split(","))
+    out = run([D.resolve(x) for x in a.models.split(",")])
     json.dump(out, open(os.path.join(D.RUNS, "tradable.json"), "w"), indent=1)
     open(os.path.join(D.RUNS, "tradable.md"), "w").write(table(out))
     print(table(out)[:5000])

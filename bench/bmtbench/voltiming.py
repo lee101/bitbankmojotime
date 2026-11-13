@@ -37,8 +37,8 @@ def run(models, costs=(0.0, 4e-4, 20e-4)):
         for m in models:
             if m == "constant":
                 w = np.ones(len(rows["t"]))
-            elif os.path.exists(D.pred_path("daily", m)):
-                w = np.clip(rows["scale"] * 1.2533 / sig(np.asarray(np.load(D.pred_path("daily", m), mmap_mode="r")[:, 0], np.float64)), 0, 3)
+            elif (m in D.models_of("daily")):
+                w = np.clip(rows["scale"] * 1.2533 / sig(np.asarray(D.open_pred("daily", m)[:, 0], np.float64)), 0, 3)
             else:
                 continue
             days, r = series(rows, w, c)
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", default=",".join(MODELS))
     a = ap.parse_args()
-    out = run(a.models.split(","))
+    out = run([x if x == "constant" else D.resolve(x) for x in a.models.split(",")])
     json.dump(out, open(os.path.join(D.RUNS, "voltiming.json"), "w"), indent=1)
     open(os.path.join(D.RUNS, "voltiming.md"), "w").write(table(out))
     print(table(out))

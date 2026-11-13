@@ -43,7 +43,7 @@ def daily_pnl(rows, q, topfrac):
 
 def run(models, topfrac):
     rows = D.load_rows("daily")
-    res = {m: daily_pnl(rows, np.load(D.pred_path("daily", m), mmap_mode="r"), topfrac) for m in models if os.path.exists(D.pred_path("daily", m))}
+    res = {m: daily_pnl(rows, D.open_pred("daily", m), topfrac) for m in models if (m in D.models_of("daily"))}
     res = {m: r for m, r in res.items() if r is not None}
     days = sorted(set.intersection(*[set(r[0].tolist()) for r in res.values()]))
     idx = {m: np.searchsorted(r[0], days) for m, r in res.items()}
@@ -82,7 +82,8 @@ if __name__ == "__main__":
     ap.add_argument("--others", default="")
     ap.add_argument("--topfrac", type=float, default=0.125)
     a = ap.parse_args()
-    ms = [a.a, a.b] + [x for x in a.others.split(",") if x]
+    ms = [D.resolve(x) for x in [a.a, a.b] + [x for x in a.others.split(",") if x]]
+    a.a, a.b = ms[0], ms[1]
     out = run(ms, a.topfrac)
     json.dump(out, open(os.path.join(D.RUNS, "ab.json"), "w"), indent=1)
     open(os.path.join(D.RUNS, "ab.md"), "w").write(table(out, a.a, a.b))
