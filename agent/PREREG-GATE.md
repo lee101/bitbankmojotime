@@ -46,3 +46,9 @@ not a finding. Nothing is staged in either case.
   bootstrap; confirmed if the 95 % interval is above zero. Secondary: d L/S net at 4 bp (90 days give an interval of roughly +-15 bp, so
   a null there is expected and not a refutation). Also reported against the registered `bmt2-ohlc+cal~8bf4ed9e` and Timestral-2048 if
   its forecasts are produced for the same rows.
+
+## Amendment before the first run (2026-11-17)
+
+The harness keys weight files by (pv, cap, regime, top) and shares one file across the band axis, so form (a)'s replica uses the live
+band 0.05 for every configuration (for band 0.03 / 0.08 configurations the "trade anyway" days are approximate; the turnover check
+covers this).
