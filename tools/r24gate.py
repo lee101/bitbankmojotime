@@ -12,6 +12,13 @@ import al, cv, slib
 
 OUT = os.environ["CORRVOL_D"]
 BAND = 0.05
+UNIS = al.POOL
+if os.environ.get("GATE_UNIS") == "CONF":
+    _sp = importlib.util.spec_from_file_location("sigconf", os.path.join(RB.HARN, "..", "signal", "conf.py")); _cf = importlib.util.module_from_spec(_sp); _sp.loader.exec_module(_cf)
+    UNIS = _cf.built()
+    assert len(UNIS) == 16, UNIS
+if os.environ.get("GATE_BANDKEY"):
+    slib.wkey = lambda c: (c[0], c[1], c[5], c[6], c[4])
 
 
 def frac(F, use):
@@ -25,7 +32,7 @@ def frac(F, use):
 
 
 @numba.njit(cache=True)
-def tilt_trade_days(W, P, Fr, k0, band):
+def tilt_trade_days(W, P, Fr, k0, band, both=False):
     K, n = W.shape
     out = W.copy()
     M = np.ones(n)
@@ -58,7 +65,7 @@ def tilt_trade_days(W, P, Fr, k0, band):
         g1 = 0.0
         for j in range(n):
             g1 += abs(tg[j])
-        s = g0 / g1 if g1 > g0 and g1 > 0 else 1.0
+        s = g0 / g1 if g1 > 0 and (both or g1 > g0) else 1.0
         for j in range(n):
             out[d, j] = tg[j] * s
             if W[d, j] == 0.0 or h[j] == 0.0 or abs(W[d, j] * M[j] - h[j]) > band:
@@ -108,8 +115,10 @@ def make_arm(form, Uo, Fr):
     FE = cv.feats(Uo); P = FE.Pd; TS = FE.tscore(); k0 = Uo.k0
     def post(Uo_, FE_, W, c):
         W = np.ascontiguousarray(np.nan_to_num(W))
-        if form == "gt":
-            return tilt_trade_days(W, P, Fr, k0, BAND)
+        if form in ("gt", "gtr"):
+            return tilt_trade_days(W, P, Fr, k0, BAND, form == "gtr")
+        if form == "gtb":
+            return tilt_trade_days(W, P, Fr, k0, float(c[4]))
         if form == "ge":
             return entry_gate(W, Fr, k0)
         return exit_hint(W, Fr, TS, k0)
@@ -131,7 +140,7 @@ def run(path, form, nplac):
     al.GCAL = slib.Cal(RB.restrict(slib.U("M11")))
     cf = slib.arm_cfgs("base")
     res = {c: [] for c in al.COSTS}; plac = {c: [[] for _ in range(nplac)] for c in al.COSTS}; turn = {c: [] for c in al.COSTS}; m11 = {}
-    for u in al.POOL:
+    for u in UNIS:
         Uo = RB.restrict(slib.U(u)); cal = slib.Cal(Uo)
         nx = np.array([s not in slib.NOX for s in Uo.sy])
         F = RB.fmat(Uo, z, "mkt+r24")
@@ -152,18 +161,19 @@ def run(path, form, nplac):
                 E = al.run_cfgs(Uo, None, c, cf, wfun=wfp); E0 = al.off_E(Uo, c, "base")
                 plac[c][k].append(al.summarize(E, E0, cal))
         print(form, u, "done", flush=True)
+    rows_u = {c: [float(x) for x in al.pooled(res[c], boot=False, sign=False)["mds_u"]] for c in al.COSTS}
     sp = importlib.util.spec_from_file_location("algoruin", os.path.join(RB.HARN, "ruin.py")); ar = importlib.util.module_from_spec(sp); sp.loader.exec_module(ar)
     Uo = RB.restrict(slib.U("M11")); cal = slib.Cal(Uo); pts = slib.ruin_points(); w0 = cv.make_wfun(Uo, cv.Arm("base"))
     out = {}
     for c in al.COSTS:
         r = al.pooled(res[c]); pm = [al.pooled(p, boot=False, sign=False)["mds"] for p in plac[c]]
-        r["placebo_mds"] = pm; r["class"] = al.klass(r, max(pm) if pm else None, min(pm) if pm else None)
+        r["mds_u"] = rows_u[c]; r["nu_pos"] = int(sum(x > 0 for x in rows_u[c])); r["placebo_mds"] = pm; r["class"] = al.klass(r, max(pm) if pm else None, min(pm) if pm else None)
         r["turnover_change_median_by_universe"] = turn[c]
         E1, w1 = m11[c]; E0 = al.off_E(Uo, c, "base")
         a, b = ar.view(E0, w0, cal, Uo, pts, cf), ar.view(E1, w1, cal, Uo, pts, cf)
         wa = [max(a[p][s]["dd60"] for s in ("S1", "S2", "S3", "S4", "S5")) for p in pts]; wb = [max(b[p][s]["dd60"] for s in ("S1", "S2", "S3", "S4", "S5")) for p in pts]
         r["ruin"] = dict(off=100 * float(np.median(wa)), on=100 * float(np.median(wb)), down=int(sum(y < x for x, y in zip(wa, wb))), up=int(sum(y > x for x, y in zip(wa, wb))))
-        out[c] = {k: v for k, v in r.items() if k not in ("mds_u", "bp_u")}
+        out[c] = {k: v for k, v in r.items() if k != "bp_u"}
     return out
 
 

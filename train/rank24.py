@@ -185,6 +185,8 @@ if __name__ == "__main__":
     ap.add_argument("cmd", choices=["train", "val", "test", "botpred"])
     ap.add_argument("--arms", default=",".join(ARMS))
     ap.add_argument("--seeds", default="0,1")
+    ap.add_argument("--coins", default="")
+    ap.add_argument("--out", default="botpred.npz")
     a = ap.parse_args()
     arms, seeds = a.arms.split(","), [int(x) for x in a.seeds.split(",")]
     if a.cmd == "val":
@@ -251,7 +253,8 @@ if __name__ == "__main__":
                     print(row, task, "done", flush=True)
     elif a.cmd == "botpred":
         b = R.bank
-        syms = [x for x in ALGO_COINS if x in b.ix]
+        syms = [x for x in (a.coins.split(",") if a.coins else ALGO_COINS) if x in b.ix]
+        print("botpred coins", len(syms), "missing", [x for x in a.coins.split(",") if a.coins and x not in b.ix], flush=True)
         out = {}
         for fi, (fn, s_abs, e_abs) in enumerate(D.FOLDS):
             t = np.arange(s_abs, e_abs) - b.t0
@@ -271,5 +274,5 @@ if __name__ == "__main__":
             out.setdefault("registered", []).append(R.predict(m, A, TT, 1, fold=fi)[:, H24, 10].cpu().numpy())
         out = {k: np.concatenate(v) for k, v in out.items()}
         out["sym"] = np.array([b.syms[i] for i in out.pop("a")])
-        np.savez(os.path.join(OUT, "botpred.npz"), **out)
+        np.savez(os.path.join(OUT, a.out), **out)
         print("botpred", {k: v.shape for k, v in out.items()}, flush=True)
