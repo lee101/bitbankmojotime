@@ -116,6 +116,16 @@ def make_arm(form, Uo, Fr):
     return cv.Arm(form, post=post)
 
 
+def base_turn(Uo, u, c, cf):
+    for f in (f"{slib.D}/arm/{u}_{c}_base_turn.npy", f"{OUT}/turn/{u}_{c}_base_turn.npy"):
+        if os.path.exists(f):
+            return np.load(f)
+    _, T, _ = slib.run_arm(Uo, cf, c, True, False, wfun=cv.make_wfun(Uo, cv.Arm("base")))
+    os.makedirs(f"{OUT}/turn", exist_ok=True); np.save(f"{OUT}/turn/{u}_{c}_base_turn.npy.tmp.npy", T)
+    os.replace(f"{OUT}/turn/{u}_{c}_base_turn.npy.tmp.npy", f"{OUT}/turn/{u}_{c}_base_turn.npy")
+    return T
+
+
 def run(path, form, nplac):
     z = np.load(path)
     al.GCAL = slib.Cal(RB.restrict(slib.U("M11")))
@@ -128,7 +138,7 @@ def run(path, form, nplac):
         wf = cv.make_wfun(Uo, make_arm(form, Uo, frac(F, nx)))
         for c in al.COSTS:
             E, T, _ = slib.run_arm(Uo, cf, c, True, False, wfun=wf); E0 = al.off_E(Uo, c, "base")
-            T0 = np.load(f"{slib.D}/arm/{u}_{c}_base_turn.npy")
+            T0 = base_turn(Uo, u, c, cf)
             turn[c].append(float(np.median((T - T0) / np.maximum(T0, 1e-9))))
             res[c].append(al.summarize(E, E0, cal))
             if u == "M11":
