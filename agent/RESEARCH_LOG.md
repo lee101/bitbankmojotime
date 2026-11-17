@@ -233,3 +233,29 @@ Reading: the 24 h forecast is mildly anti-correlated with the trend score and ca
 trend score itself has no next-day IC). The `mkt+r24` blend beats all 10 random-rank placebos by about +0.09 Sharpe, i.e. the
 information is real, but daily re-tilting costs more than it earns: the blend is not better than the plain trend book. Not an
 integration candidate in this form; research tier only (Binance Vision NC data).
+
+## Wave 4b: the frozen forecast only where the bots already trade (`agent/PREREG-GATE.md`, 2026-11-17)
+
+ALGOS pooled harness, 14 universes, 3,000-config family, 2023-01 .. 2026-10, frozen `mkt+r24` (no retraining). Placebo = 10 draws of
+day-wise shuffled forecast ranks through the same form. Turnover = median over universes of the median per-config change vs base.
+Ruin = M11 median worst dd60 (S1-S5), base -> form. `tools/r24gate.py`, outputs `runs-agent/r24/gate/`.
+
+| form | cost | mean d Sharpe [95 %] | share > 0 | d bp/day | years + (2023-26 d Sharpe) | placebo range | turnover | ruin dd60 | class |
+|---|---|---|---|---|---|---|---|---|---|
+| (a) `gt` tilt on trade days | c7 | +0.145 [+0.015, +0.264] | 85 % | -0.62 [-2.75, +1.05] | 4/4 (+0.12 +0.06 +0.22 +0.26) | -0.008 .. +0.037 | -4.9 % | 41.1 -> 24.3 | INNOVATION |
+| (a) `gt` | c10 | +0.141 [+0.011, +0.261] | 84 % | -0.61 [-2.74, +1.07] | 4/4 | -0.012 .. +0.033 | -4.9 % | 41.2 -> 24.6 | INNOVATION |
+| (b) `ge` entry gate | c7 | -0.004 [-0.032, +0.026] | 45 % | -0.14 | 2/4 | -0.008 .. +0.003 | -0.4 % | 41.1 -> 40.9 | NEUTRAL |
+| (b) `ge` | c10 | -0.004 [-0.032, +0.026] | 45 % | -0.14 | 2/4 | -0.008 .. +0.003 | -0.4 % | 41.2 -> 41.2 | NEUTRAL |
+| (c) `gx` causal exit hint | c7 | +0.128 [-0.433, +0.636] | 70 % | -2.81 [-8.09, +1.65] | 2/4 | +0.027 .. +0.176 | -15.3 % | 41.1 -> 4.6 | NEUTRAL |
+| (c) `gx` | c10 | +0.124 [-0.439, +0.633] | 69 % | -2.74 | 2/4 | +0.021 .. +0.170 | -15.3 % | 41.2 -> 4.7 | NEUTRAL |
+
+Reading:
+- (a) passes every pre-registered condition at both costs. The ranking information is worth +0.11 Sharpe over the shuffled-rank
+  placebo, and the form cuts turnover. Caveat: the form only scales rows down (gross never above base), so on the live config gross
+  drops 0.83 -> 0.74. That is why d bp/day is slightly negative and why the ruin view improves; the placebo has the same mechanics
+  and gains about 0. One of three forms, so this is a strong lead, not a finding. Nothing staged; the weights are research tier.
+- (b) changes 15 % of days and nothing else; delayed entries cost and save about the same.
+- (c) halves held coin-days (stays flat until the base exit). Its d Sharpe is no better than its placebo (+0.03 .. +0.18), so the
+  effect is de-risking, not the forecast.
+- Next for (a): a gross-matched version (re-gross to the base row only when the tilt lowers gross, so the risk is equal) as a
+  confirmation on the post-October data and on the 16 SIGNAL universes R9-R24, registered before running.

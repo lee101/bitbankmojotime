@@ -47,10 +47,15 @@ Numbers quoted here are in `bench/LEADERBOARD.md`; licences in `docs/SCOPE.md`.
 
 ### Next, in order of expected value
 
-1. Confirm `mkt+r24` forward: it failed its own validation gate, so treat the test result as one strong draw. Score it on data after
+1. Forward scoring registered in `agent/PREREG-GATE.md` section 4: frozen F4 checkpoints, 2026-11-01 .. 2027-01-31, scored once in
+   early February 2027; primary d rank IC vs `inc`. Earlier wording: confirm `mkt+r24` forward: it failed its own validation gate, so treat the test result as one strong draw. Score it on data after
    2026-10-31 as it arrives (frozen checkpoints, same L/S convention), and rerun the validation with longer windows (e.g. 180 days)
    so a 24 h L/S gate has power; register that rule before looking.
-2. Bot use without the turnover penalty: use the forecast only at the bot's own rebalance points (entry ranking among new trend
+2. Done 2026-11-17 (`agent/PREREG-GATE.md`, research log wave 4b): tilting only on the days the trend book trades anyway is
+   INNOVATION on the pooled harness at c7 / c10 (+0.145 / +0.141 d Sharpe, placebo max +0.037, 4/4 years, turnover -4.9 %). The entry
+   gate is neutral; the exit hint is de-risking that the placebo matches. Next: a gross-matched tilt on post-October data and on
+   R9-R24, registered first; then the licence question (the research-tier weights cannot go to the bots).
+   Earlier wording: bot use without the turnover penalty: use the forecast only at the bot's own rebalance points (entry ranking among new trend
    candidates, or a tie-break on top-k selection) instead of a daily tilt; and a rank-change band. One prereg on the ALGOS harness.
 3. Permissive tier for the ranker: the gain needs cross-sections (market-state inputs + grouped loss), which synthetic independent
    series cannot supply; needs commercially licensed cross-sectional data (KuCoin / Poloniex terms bar commercial use).
