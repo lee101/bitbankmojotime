@@ -445,6 +445,136 @@
   "steps": 1500,
   "tier": "research"
  },
+ "bmt2-r24-inc-s0~3539dda6": {
+  "cfg": {
+   "cal": true,
+   "coarse": [],
+   "d": 128,
+   "fine": [
+    "r",
+    "hl",
+    "gk"
+   ],
+   "heads": 4,
+   "layers": 4,
+   "scal": []
+  },
+  "ckpt_sha256": {
+   "inc_s0_F1.pt": "845ba8c08c88bf8371fafa973fb418a4fff80769ec2f5d9644d44caa9a2085cd",
+   "inc_s0_F2.pt": "a7713b8cf02bfc3367b4c258f4cce1113b7ccd874e49f4b80792853952d1de0c",
+   "inc_s0_F3.pt": "b4c7feafa2bf84910c35e90adb192b13bbb23de4a530b2d87ec9c757b619e336",
+   "inc_s0_F4.pt": "10b752a3f521f9144dfc4db3ab9ec423ebd069bb7e54708d458a40bc79b9c0ec"
+  },
+  "model_hash": "3539dda67d0423ea4160ad375524b9c8bdc3b20a5a678b5bdfaeac69fa20a9eb",
+  "note": "PREREG-24H arm inc seed 0, lam 0.0",
+  "params": "0.82M",
+  "passes": 1,
+  "pred_sha256": {
+   "daily": "5d041e69afcea90ea828dd1f36a6d797052799742e359ce447972dabcf6c268a",
+   "hourly": "c79b7f16a197258a0c709e0e6d7a8047f920138d67d592decdab6def862f4eda"
+  },
+  "steps": 1500,
+  "tier": "research"
+ },
+ "bmt2-r24-inc-s1~0da61dc8": {
+  "cfg": {
+   "cal": true,
+   "coarse": [],
+   "d": 128,
+   "fine": [
+    "r",
+    "hl",
+    "gk"
+   ],
+   "heads": 4,
+   "layers": 4,
+   "scal": []
+  },
+  "ckpt_sha256": {
+   "inc_s1_F1.pt": "ff5c27799c5f3b5edaa360a6aeb728f2b8bda8f64e9f494d97af7918922d7b14",
+   "inc_s1_F2.pt": "1b59e6ccf1e7c2d52b25663de2f2a5b0b4ea1bf0d15d91b7d047f819b0a2bc5a",
+   "inc_s1_F3.pt": "41ef63c0388f57f79b2bd4e72d184f286748989ea6af6294a007412cfd6efacc",
+   "inc_s1_F4.pt": "d43129ebb0efa2c5763197dd518b5048a44ded4facbfb9581e097f5d6d8c2877"
+  },
+  "model_hash": "0da61dc8ec6c7ff4405096142b838167c34ce9b9fc1fb330755a04f036b8416f",
+  "note": "PREREG-24H arm inc seed 1, lam 0.0",
+  "params": "0.82M",
+  "passes": 1,
+  "pred_sha256": {
+   "daily": "05f8c8e4a51e2226b559b936ceea3ebfcc3bf732f02c9a3d550998f30395cdf1",
+   "hourly": "ef1a7350b4e7ce6ecbcfaa53f6b2ed9b992085096ba4f1c3d041ad483e4d0722"
+  },
+  "steps": 1500,
+  "tier": "research"
+ },
+ "bmt2-r24-mkt+r24-s0~bec5b0cd": {
+  "cfg": {
+   "cal": true,
+   "coarse": [],
+   "d": 128,
+   "fine": [
+    "r",
+    "hl",
+    "gk",
+    "mkt",
+    "disp",
+    "brd"
+   ],
+   "heads": 4,
+   "layers": 4,
+   "scal": []
+  },
+  "ckpt_sha256": {
+   "mkt+r24_s0_F1.pt": "cb7ebdbbbd3c72084ecb5412ad1a15904565c2949d3b13332844dad573b54cc5",
+   "mkt+r24_s0_F2.pt": "565caaf6dfa84a2bed3e1ccf018225b5430f9831be68921d4ceccf7cec3a0bd0",
+   "mkt+r24_s0_F3.pt": "6cc9316f3a05cdbd3bb3241a64086bf0aee234e6b26f1c27f822269faf80ae55",
+   "mkt+r24_s0_F4.pt": "a56fc4f394d275a806b86858a930c30cdccd1dc28b7a3a83a8bc7f7cf0c20b67"
+  },
+  "model_hash": "bec5b0cde71cd212f7a520d279c5a184206f36e0bd9ecf55b793aa5c52570f26",
+  "note": "PREREG-24H arm mkt+r24 seed 0, lam 0.1",
+  "params": "0.83M",
+  "passes": 1,
+  "pred_sha256": {
+   "daily": "4a70236497aeb6964e0a12bd4c42b976ac7d1b575b17936725f4afabdae5488d",
+   "hourly": "6e63a1addf1a9e1ee407f9f50e3cd2600bcfa730180faa0b10c7b40694197608"
+  },
+  "steps": 1500,
+  "tier": "research"
+ },
+ "bmt2-r24-mkt+r24-s1~3db2cd50": {
+  "cfg": {
+   "cal": true,
+   "coarse": [],
+   "d": 128,
+   "fine": [
+    "r",
+    "hl",
+    "gk",
+    "mkt",
+    "disp",
+    "brd"
+   ],
+   "heads": 4,
+   "layers": 4,
+   "scal": []
+  },
+  "ckpt_sha256": {
+   "mkt+r24_s1_F1.pt": "fb7d3815e58f0ec0d386c14c9d308b607cb2e8b86c2fc249fead5ebeb9555579",
+   "mkt+r24_s1_F2.pt": "dcd44f4503c0fc09370c23e58a0f532f0e1259973e8ae1e625593883c5be4263",
+   "mkt+r24_s1_F3.pt": "26015171b5e5dc3339c4f76b09da5fb0fb2cfdb388eb900626fba9c9fcdd8112",
+   "mkt+r24_s1_F4.pt": "991a57fc33771ac772c20fe112f28708229ca1e31060d795dcab521e2873448f"
+  },
+  "model_hash": "3db2cd506baa88ee6600fdf25857e519be7138ff0a17970692b470f0f5c80ae7",
+  "note": "PREREG-24H arm mkt+r24 seed 1, lam 0.1",
+  "params": "0.83M",
+  "passes": 1,
+  "pred_sha256": {
+   "daily": "a7744de0467f07dec6df5ed70b22aa747a6eaf74db3c4fdee13271f020d5f766",
+   "hourly": "9d330ce54ee6153b52d73e2f479bd9b165877eb74ae4f6656f6208a783f16130"
+  },
+  "steps": 1500,
+  "tier": "research"
+ },
  "bmt2-syn-ohlc+cal-ctx256@t-sym~b5523fb3": {
   "cfg": {
    "cal": true,

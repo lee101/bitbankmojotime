@@ -172,3 +172,64 @@ Trials: 33 configurations, 1.33 GPU-hours, 3 rounds. Stop reason: proposal list 
 | 31 | 3 | lc | `ohlc+cal+ic10@m` | learning curve: size m, 100% of training symbols | F1 F2 F3 F4 | 1500 | -0.05346 |  | hourly h1 -0.19 [-0.30, -0.07]; hourly h6 -0.22 [-0.42, -0.02]; hourly h24 +0.05 [-0.23, +0.33]; daily h1 +0.20 [-0.32, +0.75]; daily h5 +0.06 [-0.55, +0.64] | curve point |
 | 32 | 3 | lc | `ohlc+cal+ic10@f0.05` | learning curve: size s, 5% of training symbols | F1 F2 F3 F4 | 1500 | -0.04929 |  | hourly h1 -0.35 [-0.59, -0.08]; hourly h6 -0.23 [-0.77, +0.30]; hourly h24 -0.53 [-1.79, +0.81]; daily h1 -0.54 [-1.86, +0.96]; daily h5 -0.54 [-2.48, +1.40] | curve point |
 | 33 | 3 | lc | `ohlc+cal+ic10@f0.25` | learning curve: size s, 25% of training symbols | F1 F2 F3 F4 | 1500 | -0.05091 |  | hourly h1 -0.09 [-0.33, +0.15]; hourly h6 -0.41 [-0.78, -0.06]; hourly h24 -0.40 [-1.19, +0.41]; daily h1 +0.19 [-0.65, +1.10]; daily h5 -0.67 [-1.84, +0.77] | curve point |
+
+## Wave 4: 24 h ranking objective under the fixed validation set-up (`agent/PREREG-24H.md`, 2026-11-17)
+
+Set-up (PLAN item 2): the incumbent is `ohlc+cal` trained on i.i.d. windows as in wave 1. Every arm uses its final EMA weights (no
+checkpoint selection on the compared metric) and two seeds (0, 1); per-origin series are averaged over the seeds. Validation = the four
+folds' 90-day validation windows, seen symbols, every hourly origin (8,544 origins pooled). L/S = top fifth minus bottom fifth by the
+24 h median, net = gross - 2 x 4 bp. 0.73 GPU-hours, 10 arm-seeds x 4 folds x 1,500 steps. `train/rank24.py`, outputs in `runs-agent/r24/`.
+
+Validation (sPL change: + = better than the incumbent):
+
+| arm | val 24 h rank IC | L/S net at 4 bp, bp | d L/S vs inc, bp | d L/S per seed | d IC vs inc | sPL change % h1 / h6 / h24 | result |
+|---|---|---|---|---|---|---|---|
+| `inc` | +0.0316 [+0.0177, +0.0464] | -6.42 [-22.74, +10.24] | | | | | incumbent |
+| `mkt` | +0.0354 [+0.0245, +0.0454] | -6.62 [-21.56, +6.21] | -0.20 [-9.65, +9.18] | -2.19 / +1.79 | +0.0039 [-0.0066, +0.0143] | -0.60 / -1.44 / -0.99 | not promoted |
+| `r24` | +0.0482 [+0.0353, +0.0626] | -7.67 [-22.11, +8.08] | -1.26 [-10.93, +8.92] | +0.33 / -2.85 | +0.0167 [+0.0071, +0.0264] | -0.03 / +0.23 / +0.34 | not promoted |
+| `mkt+r24` | +0.0745 [+0.0608, +0.0886] | +2.47 [-15.22, +20.19] | +8.89 [-3.17, +22.05] | +11.30 / +6.48 | +0.0430 [+0.0298, +0.0557] | -0.00 / +0.28 / +0.46 | not promoted, selected |
+| `mkt+r24x3` | +0.0681 [+0.0540, +0.0826] | -0.39 [-19.16, +16.66] | +6.02 [-6.42, +20.10] | +7.70 / +4.34 | +0.0365 [+0.0231, +0.0495] | -0.22 / +0.15 / +0.31 | not promoted |
+| registered `bmt2-ohlc+cal~8bf4ed9e` (1 seed, sPL-selected) | +0.0372 [+0.0253, +0.0501] | -9.97 [-22.96, +3.14] | | | +0.0056 [-0.0048, +0.0154] vs inc | | reference |
+
+No arm passed the registered rule (L/S interval above zero): the 90-day validation windows are too short for a 24 h L/S at this noise
+(interval width about 25 bp). Market-state inputs alone do nothing; the ranking loss alone raises IC by 0.017; together they raise it
+by 0.043 (interaction), at no pinball cost. Per the prereg the largest-Delta arm `mkt+r24` was scored once on test, labelled not promoted.
+
+Test, hourly h = 24, 6,695 origins, F1-F4 (`runs-agent/r24/test.md`; d = `mkt+r24` minus row, paired 7-day block bootstrap):
+
+| model | rank IC | L/S gross bp | L/S net at 4 bp | L/S net at 20 bp | d IC | d L/S bp |
+|---|---|---|---|---|---|---|
+| `mkt+r24` (2 seeds; `bmt2-r24-mkt+r24-s0~bec5b0cd`, `-s1~3db2cd50`) | +0.0845 [+0.0775, +0.0913] | +24.44 [+17.19, +31.23] | +16.44 [+9.19, +23.23] | -15.56 [-22.81, -8.77] | | |
+| `inc` (2 seeds; `bmt2-r24-inc-s0~3539dda6`, `-s1~0da61dc8`) | +0.0448 [+0.0374, +0.0517] | +13.81 [+7.12, +20.41] | +5.81 [-0.88, +12.41] | -26.19 | +0.0396 [+0.0330, +0.0466] | +10.63 [+5.51, +15.43] |
+| `bmt2-ohlc+cal~8bf4ed9e` | +0.0498 [+0.0431, +0.0564] | +13.68 [+7.00, +20.57] | +5.68 [-1.00, +12.57] | -26.32 | +0.0346 [+0.0290, +0.0407] | +10.76 [+5.02, +16.29] |
+| `timestral-official` | +0.0268 [+0.0188, +0.0352] | +11.44 [+3.71, +18.68] | +3.44 [-4.29, +10.68] | -28.56 | +0.0577 [+0.0487, +0.0670] | +13.00 [+5.02, +21.23] |
+| `timestral-official-2048` | +0.0427 [+0.0351, +0.0508] | +15.31 [+8.47, +23.07] | +7.31 [+0.47, +15.07] | -24.69 | +0.0418 [+0.0332, +0.0510] | +9.12 [+0.67, +17.24] |
+
+Both seeds separate alone (vs inc: +11.1 [+5.7, +16.7] and +10.2 [+5.0, +15.1] bp). Unseen symbols: IC 0.097, L/S net at 4 bp +27 [+8, +46],
+d vs inc +10.9 [+0.9, +21.2]. Hourly sPL vs inc -0.06 / +0.20 / +0.32 % (h1 / h6 / h24), still 0.7-1.2 % better than Timestral.
+This is the first L/S net of maker costs whose interval excludes zero (the old 240-interval table had one, Timestral-2048 at +7).
+Caveats: one test scoring of a config that failed its validation gate; the L/S convention charges a full round trip per origin on
+overlapping 5-hour-stride 24 h holds and assumes shorting; at taker costs (20 bp) every model is negative.
+
+### Does it add to the bots' trend signal (ALGOS pooled harness, 14 universes, 36 coins, daily 00:00 UTC, 2023-01 .. 2026-10)
+
+Correlation (per-day Spearman, mean over 19,484 universe-days, 7-day block intervals):
+
+| forecast | rho with trend score | IC vs next-day return | trend score IC |
+|---|---|---|---|
+| `mkt+r24` | -0.136 [-0.154, -0.116] | +0.070 [+0.059, +0.083] | -0.001 [-0.015, +0.013] |
+| `inc` | -0.169 [-0.185, -0.155] | +0.028 [+0.015, +0.041] | |
+| registered `ohlc+cal` | -0.161 [-0.180, -0.140] | +0.035 [+0.023, +0.048] | |
+
+Blend arm (held weights x (1 + r), r = centred forecast rank, gross kept), pooled paired test vs `base` on the harness's 3,000-config family:
+
+| forecast | cost | mean d Sharpe [95 %] | share > 0 | d bp/day | 10 placebo draws (shuffled ranks) | class |
+|---|---|---|---|---|---|---|
+| `mkt+r24` | c7 | -0.086 [-0.185, +0.014] | 30 % | -1.17 [-2.32, -0.20] | -0.214 .. -0.136 | NEUTRAL |
+| `mkt+r24` | c10 | -0.118 [-0.217, -0.016] | 24 % | -1.39 [-2.54, -0.41] | -0.251 .. -0.173 | NEUTRAL (-) |
+| `inc` | c7 / c10 | -0.244 / -0.278 (intervals below 0) | 7 % / 5 % | -2.3 / -2.5 | not run | HARMFUL |
+
+Reading: the 24 h forecast is mildly anti-correlated with the trend score and carries ranking information the trend score lacks (the
+trend score itself has no next-day IC). The `mkt+r24` blend beats all 10 random-rank placebos by about +0.09 Sharpe, i.e. the
+information is real, but daily re-tilting costs more than it earns: the blend is not better than the plain trend book. Not an
+integration candidate in this form; research tier only (Binance Vision NC data).

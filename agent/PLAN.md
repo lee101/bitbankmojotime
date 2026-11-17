@@ -34,17 +34,30 @@ Numbers quoted here are in `bench/LEADERBOARD.md`; licences in `docs/SCOPE.md`.
   / open interest, options-implied volatility, scheduled events. Each needs a data source with usable terms first.
 - For trading value the limit is costs, not the forecaster: a perfect copy of today's signal earns 5-14 bp gross per round trip.
 
+### Wave 4 outcome (2026-11-17, `agent/PREREG-24H.md`, `agent/RESEARCH_LOG.md` wave 4)
+
+- Items 1 and 2 of the previous list are done. Fixed set-up: i.i.d.-trained incumbent, final EMA weights, two seeds, the loop's
+  validation windows. Under it `mkt+r24` (market-state inputs + a 24 h within-origin correlation loss, weight 0.1) raised the
+  validation 24 h IC by +0.043 [+0.030, +0.056] but its L/S Delta (+8.9 bp [-3.2, +22.1]) did not clear the gate; scored once on
+  test as the largest-Delta arm (not promoted): IC 0.085 vs 0.045 (incumbent retrain) / 0.050 (registered) / 0.043 (Timestral-2048),
+  24 h L/S net at 4 bp +16.4 bp [+9.2, +23.2], +10.6 [+5.5, +15.4] over the incumbent, both seeds separate, no pinball cost.
+- Bots: rho with the binancegomojo trend score -0.14; next-day IC 0.070 on the 36 harness coins where the trend score has none; a
+  daily (1 + r) tilt of the trend book beats random-rank placebos by ~0.09 Sharpe but is still below the plain book (-0.09 / -0.12 d
+  Sharpe at c7 / c10) because of the extra turnover.
+
 ### Next, in order of expected value
 
-1. A 24 h-only ranking objective (the only horizon where gross edge exceeds maker-tier costs) with market-state inputs; promote
-   on the 24 h long-short net of costs on validation, then one test-fold scoring.
-2. Before any more ranking work, fix the validation set-up that promoted a ranker which did not confirm: the wave-3 incumbent was
-   trained on grouped batches and had a lower validation IC (0.046) than the same inputs trained on i.i.d. windows reach on the
-   unseen folds (0.066). Compare candidates against the i.i.d.-trained incumbent and require two seeds.
-3. Permissive tier: the 256-bar variant for the rotation consumer exists (`bmt2-syn-ohlc+cal-ctx256@t~b5523fb3`); next is a
+1. Confirm `mkt+r24` forward: it failed its own validation gate, so treat the test result as one strong draw. Score it on data after
+   2026-10-31 as it arrives (frozen checkpoints, same L/S convention), and rerun the validation with longer windows (e.g. 180 days)
+   so a 24 h L/S gate has power; register that rule before looking.
+2. Bot use without the turnover penalty: use the forecast only at the bot's own rebalance points (entry ranking among new trend
+   candidates, or a tie-break on top-k selection) instead of a daily tilt; and a rank-change band. One prereg on the ALGOS harness.
+3. Permissive tier for the ranker: the gain needs cross-sections (market-state inputs + grouped loss), which synthetic independent
+   series cannot supply; needs commercially licensed cross-sectional data (KuCoin / Poloniex terms bar commercial use).
+4. Permissive tier: the 256-bar variant for the rotation consumer exists (`bmt2-syn-ohlc+cal-ctx256@t~b5523fb3`); next is a
    shadow run per `agent/INTEGRATION.md`. A ranking head cannot be trained on independent synthetic series; it needs cross-sections of real data
    under commercial terms.
-4. Kernel work of section 4 (the promoted model runs at 218k rows/s on the shared GPU and 24k rows/s on 12 CPU threads; speed is
+5. Kernel work of section 4 (the promoted model runs at 218k rows/s on the shared GPU and 24k rows/s on 12 CPU threads; speed is
    not the bottleneck for any current consumer).
 
 ## 2. Autoresearch loop
