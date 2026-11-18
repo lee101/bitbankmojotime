@@ -102,7 +102,7 @@ def build_universe(n_eval=64):
 
 
 def universe():
-    return json.load(open(os.path.join(REPO, "data", "universe.json")))
+    return json.load(open(os.environ.get("BMT_UNIVERSE", os.path.join(REPO, "data", "universe.json"))))
 
 
 def fold_bounds(task):

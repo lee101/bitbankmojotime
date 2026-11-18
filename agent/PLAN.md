@@ -62,6 +62,14 @@ Numbers quoted here are in `bench/LEADERBOARD.md`; licences in `docs/SCOPE.md`.
    candidates, or a tie-break on top-k selection) instead of a daily tilt; and a rank-change band. One prereg on the ALGOS harness.
 3. Permissive tier for the ranker: the gain needs cross-sections (market-state inputs + grouped loss), which synthetic independent
    series cannot supply; needs commercially licensed cross-sectional data (KuCoin / Poloniex terms bar commercial use).
+   Done 2026-11-18 (`agent/LICENCE-ROUTES.md`, `agent/PREREG-LIC.md`): survey of 9 sources. No free source with usable terms has
+   100+ symbols hourly from 2020; Coinbase bars ML training outright; Kraken (own-benefit grant, no ML / trading clause) is the
+   largest free one (27 symbols by 2020, 156 by 2022-12). `mkt+r24` retrained on Kraken keeps its quality (val IC +0.063; harness
+   next-day IC +0.060 = Binance model on the same cells), but the R9-R24 tilt does NOT survive by the registered bar (`gt` +0.065
+   [-0.049, +0.180], NEUTRAL) because Kraken lists only 21/30 coins; the Binance model on the same coverage also fails (+0.038).
+   Owner decisions: (a) whether Kraken's "own benefit" covers bot sizing; (b) a source for the missing coins' bars; (c) or Tardis
+   (Business tier for 2019+ history; Solo USD 900 / month reaches 2022-11) / CoinGecko Analyst (USD 129, close-only, needs a
+   no-range variant). Next if (c) is bought: rebuild the cache from it and rerun `runs-agent/lic/run.sh` + `gate.sh` unchanged.
 4. Permissive tier: the 256-bar variant for the rotation consumer exists (`bmt2-syn-ohlc+cal-ctx256@t~b5523fb3`); next is a
    shadow run per `agent/INTEGRATION.md`. A ranking head cannot be trained on independent synthetic series; it needs cross-sections of real data
    under commercial terms.

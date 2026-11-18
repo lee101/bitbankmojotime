@@ -280,3 +280,21 @@ So part of `gt`'s Sharpe comes from the forecast choosing which coins to cut, wh
 Post-October data: none usable (the forecaster's input cache ends 2026-10-31); folded into the February 2027 forward scoring.
 Integration design (flag default off, not installed, licence blocker): binancegomojo branch `research/fcast-tilt`,
 `docs/experiments/FCAST-TILT-integration.md`.
+
+## Wave 4d: licence route, `mkt+r24` retrained on Kraken OHLCVT (`agent/PREREG-LIC.md`, 2026-11-18)
+
+Survey and quotes in `agent/LICENCE-ROUTES.md`. Kraken's full OHLCVT archive (SHA-256 checked), 60-minute USD pairs, prereg mapping
+and liquidity filter: pool 156 (27 listed by 2020-01, 98 by 2022-01), eval 47, held-out 12. Same recipe, 2 seeds, 2 x 326 s GPU.
+Forecasts from Kraken bars for 21/30 R9-R24 coins and 26/36 ALGOS coins, to 2026-09-30.
+
+| measure | Kraken `mkt+r24` | Binance `mkt+r24`, same cells |
+|---|---|---|
+| val 24 h IC (Kraken seen symbols) | +0.063 [+0.045, +0.081] | |
+| ALGOS next-day IC | +0.060 [+0.046, +0.076] | +0.060 [+0.045, +0.074] |
+| rho with trend score | +0.004 | -0.129 |
+| R9-R24 `gt` c7 / c10 | +0.065 [-0.049, +0.180] / +0.062, 12/16, placebo max -0.006, NEUTRAL | +0.038 [-0.076, +0.156] / +0.035, 11/16, NEUTRAL |
+| R9-R24 `gtr` c7 / c10 | +0.031 [-0.053, +0.120] / +0.028, 11/16, turnover +1.9 %, NEUTRAL | |
+
+Verdict: does not survive (registered bar). The coverage-matched reference fails the same way and lower, so the cause is coverage
+(9 coins and October missing), not the Kraken training data, which carries the ranking information at the same IC.
+Outputs `runs-agent/lic/`.

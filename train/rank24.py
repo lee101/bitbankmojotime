@@ -258,7 +258,7 @@ if __name__ == "__main__":
         out = {}
         for fi, (fn, s_abs, e_abs) in enumerate(D.FOLDS):
             t = np.arange(s_abs, e_abs) - b.t0
-            t = t[(t + b.t0) % 24 == 23]
+            t = t[((t + b.t0) % 24 == 23) & (t < b.T)]
             A, TT = np.meshgrid([b.ix[x] for x in syms], t, indexing="ij")
             A, TT = A.ravel(), TT.ravel()
             okr = b.real[A, TT] & (TT - b.first[A] >= 6200) & (TT <= b.last[A])
