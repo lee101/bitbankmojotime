@@ -140,7 +140,16 @@ def run(path, form, nplac):
     al.GCAL = slib.Cal(RB.restrict(slib.U("M11")))
     cf = slib.arm_cfgs("base")
     res = {c: [] for c in al.COSTS}; plac = {c: [[] for _ in range(nplac)] for c in al.COSTS}; turn = {c: [] for c in al.COSTS}; m11 = {}
+    import pickle
     for u in UNIS:
+        ck = f"{OUT}/cache/{form}_{u}_{nplac}.pkl"
+        if os.path.exists(ck):
+            r_, p_, t_ = pickle.load(open(ck, "rb"))
+            for c in al.COSTS:
+                res[c].append(r_[c]); turn[c].append(t_[c])
+                for k in range(nplac): plac[c][k].append(p_[c][k])
+            print(form, u, "cached", flush=True)
+            continue
         Uo = RB.restrict(slib.U(u)); cal = slib.Cal(Uo)
         nx = np.array([s not in slib.NOX for s in Uo.sy])
         F = RB.fmat(Uo, z, "mkt+r24")
@@ -160,10 +169,18 @@ def run(path, form, nplac):
             for c in al.COSTS:
                 E = al.run_cfgs(Uo, None, c, cf, wfun=wfp); E0 = al.off_E(Uo, c, "base")
                 plac[c][k].append(al.summarize(E, E0, cal))
+        os.makedirs(f"{OUT}/cache", exist_ok=True)
+        pickle.dump(({c: res[c][-1] for c in al.COSTS}, {c: [plac[c][k][-1] for k in range(nplac)] for c in al.COSTS}, {c: turn[c][-1] for c in al.COSTS}), open(ck + ".tmp", "wb"))
+        os.replace(ck + ".tmp", ck)
         print(form, u, "done", flush=True)
     rows_u = {c: [float(x) for x in al.pooled(res[c], boot=False, sign=False)["mds_u"]] for c in al.COSTS}
     sp = importlib.util.spec_from_file_location("algoruin", os.path.join(RB.HARN, "ruin.py")); ar = importlib.util.module_from_spec(sp); sp.loader.exec_module(ar)
     Uo = RB.restrict(slib.U("M11")); cal = slib.Cal(Uo); pts = slib.ruin_points(); w0 = cv.make_wfun(Uo, cv.Arm("base"))
+    if not m11:
+        zr = np.load(os.environ["RUIN_BOTPRED"]); nx = np.array([s not in slib.NOX for s in Uo.sy])
+        wr = cv.make_wfun(Uo, make_arm(form, Uo, frac(RB.fmat(Uo, zr, "mkt+r24"), nx)))
+        for c in al.COSTS:
+            m11[c] = (al.run_cfgs(Uo, None, c, cf, wfun=wr), wr)
     out = {}
     for c in al.COSTS:
         r = al.pooled(res[c]); pm = [al.pooled(p, boot=False, sign=False)["mds"] for p in plac[c]]
