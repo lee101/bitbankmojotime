@@ -121,7 +121,7 @@ def run_u(z, H, forms, nplac, u, ruin=False):
             print(u, "ruin", c, flush=True)
     if ruin:
         return out["ruin"]
-    pf = [f for f in forms if f != "gtX"]
+    pf = [f for f in forms if f != "gtX" and not (f.endswith("r") and os.environ.get("HZ_PLAC_R") == "0")]
     for k in range(nplac):
         rng = np.random.default_rng([PSEED, 5, k]); Fp = FH.copy()
         for d in range(len(Fp)):

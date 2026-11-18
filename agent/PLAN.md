@@ -45,6 +45,16 @@ Numbers quoted here are in `bench/LEADERBOARD.md`; licences in `docs/SCOPE.md`.
   daily (1 + r) tilt of the trend book beats random-rank placebos by ~0.09 Sharpe but is still below the plain book (-0.09 / -0.12 d
   Sharpe at c7 / c10) because of the extra turnover.
 
+### Wave 5 outcome (2026-11-18, `agent/PREREG-HORIZON.md`, research log wave 5)
+
+- Forecast: `mkt+r72` / `mkt+r168` (same recipe, ranking term at 72 h / 168 h) rank better than `mkt+r24` at every horizon on the
+  unseen folds (IC at 168 h 0.106 against 0.067, d +0.039 [+0.022, +0.057]; at 24 h 0.091-0.093 against 0.085) and their ranks are
+  more persistent (lag-1-day autocorrelation 0.41 / 0.57 against 0.21). No pinball cost.
+- Trading: registered null. With the 168 h forecast the trade-day tilt is +0.166 Sharpe vs base and +0.021 [-0.033, +0.078] over
+  the incumbent `gt24` (57 % of configurations, 8/14 universes): not separated, minimum detectable 0.08. Blend +0.009. The daily tilt
+  becomes neutral (+0.03) instead of harmful but stays 0.11 below `gt24`; a no-trade band does not help. `gt24` stays; no
+  confirmation run, R25-R40 (seeded in the prereg) remain unbuilt.
+
 ### Next, in order of expected value
 
 1. Forward scoring registered in `agent/PREREG-GATE.md` section 4: frozen F4 checkpoints, 2026-11-01 .. 2027-01-31, scored once in

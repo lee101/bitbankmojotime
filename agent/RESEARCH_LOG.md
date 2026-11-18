@@ -298,3 +298,90 @@ Forecasts from Kraken bars for 21/30 R9-R24 coins and 26/36 ALGOS coins, to 2026
 Verdict: does not survive (registered bar). The coverage-matched reference fails the same way and lower, so the cause is coverage
 (9 coins and October missing), not the Kraken training data, which carries the ranking information at the same IC.
 Outputs `runs-agent/lic/`.
+
+## Wave 5: longer ranking horizons, 72 h and 168 h (`agent/PREREG-HORIZON.md`, 2026-11-18)
+
+Question: the trend book holds for days to weeks and the forecaster looks 24 h ahead; does a model trained to rank at 72 h / 168 h
+(1) rank better at those horizons, with more persistent ranks, and (2) improve the trend book beyond the incumbent `gt24` tilt.
+`mkt+r72`, `mkt+r168`: the `mkt+r24` recipe with a fifth horizon slot H (1 h bars only) carrying the correlation term; every hourly
+training label ends before the fold limit (168 h before the first validation origin, 2,496 h before the first test origin). 2 seeds
+x 4 folds x 1,500 steps, 348-375 s per seed, 0.39 GPU-hours, no out-of-memory retry. `train/rankh.py`, `tools/hzstep0.py`,
+`tools/hzgate.py`; result files `agent/hz/`. Scores: s24 / s72 / s168 = each model's median at its ranking horizon.
+
+### Step 0: forecast quality (28-day calendar-block bootstrap, paired; T decides, V sign check)
+
+T = benchmark hourly test rows, unseen folds F1-F4, 64 symbols, 6,695 origins, 51 blocks:
+
+| score | IC at 24 h | IC at 72 h | IC at 168 h |
+|---|---|---|---|
+| s24 (`mkt+r24`) | +0.0845 [+0.0754, +0.0936] | +0.0749 [+0.0655, +0.0843] | +0.0665 [+0.0535, +0.0802] |
+| s72 (`mkt+r72`) | +0.0930 [+0.0832, +0.1031] | +0.0921 [+0.0803, +0.1044] | +0.0906 [+0.0735, +0.1084] |
+| s168 (`mkt+r168`) | +0.0913 [+0.0821, +0.1007] | +0.0990 [+0.0846, +0.1131] | +0.1059 [+0.0821, +0.1292] |
+| rank blend s24 + s72 | +0.0931 | +0.0874 | +0.0821 |
+| rank blend s24 + s168 | +0.0965 | +0.0957 | +0.0946 |
+| 24 h slot of `mkt+r72` / `mkt+r168` (pinball only) | +0.0805 / +0.0775 | +0.0705 / +0.0699 | +0.0596 / +0.0638 |
+| s72 minus s24 | +0.0085 [+0.0046, +0.0124] | **+0.0172 [+0.0117, +0.0229]** | +0.0241 [+0.0161, +0.0325] |
+| s168 minus s24 | +0.0068 [+0.0001, +0.0140] | +0.0240 [+0.0121, +0.0359] | **+0.0394 [+0.0223, +0.0569]** |
+
+| row set | s24: IC at 24 / 72 / 168 h | s72 | s168 | s72 minus s24 at 72 h | s168 minus s24 at 168 h |
+|---|---|---|---|---|---|
+| V validation (8,544 origins, 18 blocks) | +0.0745 / +0.0652 / +0.0470 | +0.0844 / +0.0833 / +0.0721 | +0.0784 / +0.0768 / +0.0704 | +0.0181 [+0.0079, +0.0274] | +0.0234 [-0.0058, +0.0478] |
+| B bots' panel (daily 00:00 UTC, 45 coins, 1,399 days) | +0.0766 / +0.0774 / +0.0707 | +0.0924 / +0.1033 / +0.1042 | +0.0922 / +0.1059 / +0.1149 | +0.0259 [+0.0156, +0.0368] | +0.0442 [+0.0249, +0.0646] |
+
+Persistence on B (seed-averaged median; f = rank fraction, the tilt multiplier is 0.5 + f):
+
+| score | lag-1-day rank autocorrelation | minus s24 | lag-7-day | mean abs daily change of f (random ranks: 0.333) | ratio to s24 |
+|---|---|---|---|---|---|
+| s24 | +0.211 [+0.191, +0.234] | | +0.115 | 0.291 | 1.00 |
+| s72 | +0.407 [+0.380, +0.433] | +0.196 [+0.175, +0.215] | +0.306 | 0.247 | 0.85 |
+| s168 | +0.574 [+0.547, +0.604] | +0.363 [+0.339, +0.389] | +0.483 | 0.201 | 0.69 |
+| blend s24 + s168 | +0.385 | +0.173 [+0.160, +0.187] | +0.294 | 0.254 | 0.87 |
+
+Proceed rule: both horizons pass both branches ((a) dIC at H on T above zero with V positive; (b) autocorrelation +0.20 / +0.36 above
+s24 at no IC loss). Minimum detectable dIC on T (80 % power) 0.008 (72 h) / 0.024 (168 h). H* = 168 (mean B-panel IC at 72 h and
+168 h: 0.110 against 0.104 for s72). Sanity: s24 reproduces the registered validation IC 0.0745 and test IC 0.0845; bot forecasts
+match the stored files to 6e-6 of scale. Each long-model seed alone beats each `mkt+r24` seed at all three horizons on T (168 h:
+0.110 / 0.102 against 0.068 / 0.065). Validation sPL against `mkt+r24`, h 1 / 6 / 24: -0.10 / +0.01 / -0.12 % (`mkt+r72`),
+-0.07 / -0.02 / -0.03 % (`mkt+r168`): no pinball cost.
+Reading: a longer ranking horizon gives a better ranker at every horizon, the 24 h one included, and its ranks turn over 15 % (72 h) / 31 % (168 h)
+less per day. The 24 h model's own ranks are nearly reshuffled daily (autocorrelation 0.21).
+
+### Step 1: trading lead search (ALGOS pooled harness, 14 universes CORE + R1-R8, 3,000 configurations, 2023-01 .. 2026-10)
+
+References on the same binary: `base` (identical to the harness's stored base arm on the six core universes, max difference 0) and `gt24` (reproduces wave 4b:
++0.145 / +0.141). H = 168; placebo = 10 draws with s168 shuffled across coins within each day (for `gtB` the 24 h ranks stay).
+
+| form | cost | vs base: d Sharpe [95 %] | share | d bp/day | years + | universes + | placebo range | class | turnover | ruin dd60 (M11) | vs `gt24`: d Sharpe [95 %] | share | universes + | years + | d bp/day | placebo range | turnover vs `gt24` |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `gt24` (incumbent) | c7 | +0.145 [+0.015, +0.264] | 85 % | -0.62 | 4/4 | 14/14 | | INNOVATION | -4.9 % | 41.1 -> 24.3 | | | | | | | |
+| `gt24` | c10 | +0.141 [+0.011, +0.261] | 84 % | -0.61 | 4/4 | 14/14 | | INNOVATION | -4.9 % | 41.2 -> 24.6 | | | | | | | |
+| `gtH` (`gt` with s168) | c7 | +0.166 [+0.033, +0.295] | 85 % | -0.08 | 4/4 | 13/14 | -0.018 .. +0.038 | INNOVATION | -3.1 % | 41.1 -> 27.6 | +0.021 [-0.033, +0.078] | 57 % | 8/14 | 3/4 | +0.55 [+0.01, +1.14] | -0.163 .. -0.106 | +1.7 % |
+| `gtH` | c10 | +0.163 [+0.030, +0.293] | 85 % | -0.07 | 4/4 | 13/14 | -0.022 .. +0.035 | INNOVATION | -3.1 % | 41.2 -> 27.7 | +0.022 [-0.033, +0.079] | 57 % | 8/14 | 3/4 | +0.54 [-0.00, +1.14] | -0.163 .. -0.106 | +1.7 % |
+| `gtB` (`gt` with the s24 + s168 rank blend) | c7 | +0.154 [+0.022, +0.280] | 85 % | -0.42 | 4/4 | 13/14 | +0.056 .. +0.103 | INNOVATION | -4.0 % | 41.1 -> 26.2 | +0.009 [-0.018, +0.039] | 53 % | 8/14 | 3/4 | +0.20 [-0.03, +0.49] | -0.088 .. -0.042 | +1.1 % |
+| `gtB` | c10 | +0.150 [+0.018, +0.278] | 85 % | -0.41 | 4/4 | 13/14 | +0.053 .. +0.100 | INNOVATION | -4.0 % | 41.2 -> 26.3 | +0.009 [-0.019, +0.039] | 53 % | 8/14 | 3/4 | +0.20 [-0.03, +0.48] | -0.088 .. -0.042 | +1.1 % |
+| `dtH` (daily tilt with s168) | c7 | +0.032 [-0.080, +0.141] | 63 % | -0.43 | 2/4 | 10/14 | -0.204 .. -0.149 | NEUTRAL | +17.5 % | 41.1 -> 36.9 | -0.113 [-0.211, -0.015] | 22 % | 0/14 | 0/4 | +0.20 [-0.91, +1.40] | -0.348 .. -0.294 | +25.1 % |
+| `dtH` | c10 | +0.015 [-0.097, +0.125] | 58 % | -0.54 | 2/4 | 10/14 | -0.241 .. -0.186 | NEUTRAL | +17.5 % | 41.2 -> 37.0 | -0.127 [-0.227, -0.029] | 20 % | 0/14 | 0/4 | +0.07 [-1.03, +1.28] | -0.383 .. -0.327 | +25.1 % |
+| `dbH` (daily tilt, no-trade band 0.25) | c7 | +0.024 [-0.086, +0.132] | 61 % | -0.46 | 2/4 | 10/14 | -0.199 .. -0.140 | NEUTRAL | +15.2 % | 41.1 -> 37.1 | -0.121 [-0.213, -0.027] | 20 % | 0/14 | 0/4 | +0.16 [-0.91, +1.30] | -0.344 .. -0.284 | +23.0 % |
+| `dbH` | c10 | +0.008 [-0.103, +0.116] | 57 % | -0.56 | 2/4 | 10/14 | -0.235 .. -0.174 | NEUTRAL | +15.2 % | 41.2 -> 37.4 | -0.134 [-0.225, -0.040] | 18 % | 0/14 | 0/4 | +0.04 [-1.04, +1.19] | -0.376 .. -0.316 | +23.0 % |
+| `gtX` (descriptive: `gt` with s72, no placebo, cannot be picked) | c7 / c10 | +0.142 [-0.001, +0.273] / +0.139 | 83 % / 82 % | -0.53 | 4/4 | 13/14 | | NEUTRAL | -4.0 % | | -0.002 [-0.037, +0.038] / -0.003 | 49 % | 6/14 | 1/4 | +0.09 | | +1.0 % |
+
+Pick rule (interval of the paired gain over `gt24` above zero, above every placebo draw, >= 80 % of configurations, both costs): no
+form is eligible. **Registered null at step 1: the incumbent `gt24` stays.** Step 2 was not run; R25-R40 were never built.
+Minimum detectable paired gain over `gt24` (80 % power, 2.8 x month-bootstrap SE): 0.079 d Sharpe for `gtH` (SE 0.028), 0.041 for
+`gtB` (SE 0.015), 0.14 for the daily forms. The observed `gtH` gain (+0.021) is a quarter of what this test can resolve.
+
+Reading:
+- The better ranker does not show up as a separated trading gain in the trade-day form. `gtH` is +0.02 Sharpe over `gt24` with
+  57 % of configurations and 8/14 universes; by universe it is positive on 6 of 8 random universes and on 2 of 6 core ones
+  (M11 -0.003, M10 -0.037, M5 -0.089). The blend adds nothing over `gt24` (+0.009).
+- Descriptive, from the registered outputs: `gtH` gives up less return than `gt24` (d bp/day -0.08 against -0.62 vs base;
+  +0.55 bp/day over `gt24`, interval touching zero at c10; median d CAGR +2.2 points, d maxDD +0.6 points) and de-risks less
+  (ruin dd60 41.1 -> 27.6 against 24.3). So relative to `gt24` it is a slightly different risk position, not a clear Sharpe gain.
+- The daily tilt improves from harmful with the 24 h forecast (-0.086 / -0.118, wave 4) to neutral with the 168 h one
+  (+0.032 / +0.015), and it is +0.18 to +0.26 above its shuffled-rank placebo, so the information is real and the more persistent
+  ranks cost less. It still adds 17.5 % turnover and is 0.11 below `gt24` with the interval below zero. The no-trade band removes
+  only 2 points of that turnover and gains nothing.
+- The 72 h forecast in `gt` equals `gt24` (-0.002).
+- Not done (not registered, so not run): risk-matched arms on the lead universes. A registered test of "equal risk, longer horizon"
+  would be the next step for this line, with R25-R40 still untouched. Limits: one lead search on universes and a period used in
+  waves 4-4c; the long models' test-row medians were scored here (their h 1 / 6 / 24 quantiles were not added to the leaderboard).
