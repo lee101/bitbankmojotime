@@ -470,3 +470,137 @@ Caveats: in-sample calibration over 46 months; the two live rows are single path
 Binance settings and -9.8 on the KuCoin settings, against a pooled median of -1.0; at k 1.10 the KuCoin row is still 6.7 below its
 base, interval [-21.5, +3.1], and reaches base CAGR near 1.15 - 1.20). Turnover is the sim total (the gearing changes the whole
 simulated history). The forward check is the February 2027 scoring.
+
+## Wave 4g: k = 1.20 on new universes R41-R56 (`agent/PREREG-REGEAR2.md`, 2026-11-18)
+
+Sixteen universes drawn after wave 4f by the R9-R24 procedure with rng [20261119, 41, i] (`draw_sets` reproduces R9-R24 and R25-R40
+16/16 each; R25-R40 left to the HORIZON track), all 16 built with `prep.py` unchanged; forecasts = the stored predictions of the frozen
+checkpoints (no new prediction; every coin already covered). Arms base k 1, `gt` at k 1.00 / 1.10 / 1.20 / 1.30, pure gearing at 0.75 ..
+1.30, c7 / c10, 2023-01 .. panel end. Checks before the prereg: R9 rebuilt through our path is byte-identical to the stored R9, its base
+simulated here equals the stored base, `gt` k 1 equals the wave 4c cache. The run was interrupted by a host restart after 252 of 416
+cells and resumed from the cell cache with the registered settings (no cell recomputed). `runs-agent/regear2/regear2.json`.
+
+R41-R56 pooled, c7 (48,048 cells; level = median, (d) = median paired difference against base k 1; ruin = median over 432 universe-point cells):
+
+| arm | CAGR (d) | mean d CAGR [95 %] | mean d Sharpe [95 %] | gross | vol ratio | worst month (d) | 21-day DD (d) | 60-day DD (d) | maxDD (d) | turnover | ruin P(DD>60 %) | universes: CAGR up and worst month not up / maxDD not up | rule: risk / gain |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| base k 1.00 | 27.3 | | | 0.670 | 1.000 | 10.4 | 14.8 | 18.9 | 25.4 | | 32.6 | | |
+| `gt` k 1.00 | 25.1 (-2.1) | -2.18 [-12.43, +3.95] | +0.111 [-0.019, +0.242] | 0.596 | 0.807 | 8.1 (-2.16) | 11.9 (-2.59) | 14.8 (-3.54) | 21.1 (-3.82) | -6.0 % | 16.1 | 5 / 16 of 16 | pass / fail |
+| `gt` k 1.10 | 27.0 (-0.4) | -0.38 [-7.70, +4.39] | +0.099 [-0.028, +0.223] | 0.646 | 0.875 | 8.7 (-1.52) | 12.9 (-1.64) | 16.0 (-2.39) | 23.2 (-1.98) | +3.5 % | 21.9 | 6 / 15 of 16 | pass / fail |
+| `gt` k 1.20 | 28.5 (+1.0) | +1.07 [-4.35, +5.29] | +0.084 [-0.038, +0.210] | 0.691 | 0.938 | 9.3 (-0.91) | 13.7 (-0.77) | 17.1 (-1.33) | 25.0 (-0.29) | +13.3 % | 28.2 | 13 / 8 of 16 | pass / pass |
+| `gt` k 1.30 | 30.0 (+2.6) | +2.46 [-2.20, +7.67] | +0.075 [-0.048, +0.202] | 0.735 | 0.998 | 9.8 (-0.32) | 14.6 (+0.00) | 18.2 (-0.34) | 26.5 (+1.25) | +23.0 % | 33.6 | 8 / 4 of 16 | fail / fail |
+| base k 0.85 | 24.1 (-3.0) | -3.10 [-10.02, +0.76] | +0.014 [-0.013, +0.041] | 0.581 | 0.867 | 9.1 (-1.15) | 13.0 (-1.61) | 16.7 (-2.05) | 22.0 (-3.14) | -16.2 % |  | 0 / 16 of 16 |  |
+| base k 1.10 | 29.0 (+1.6) | +1.64 [-0.64, +6.06] | -0.013 [-0.028, +0.003] | 0.724 | 1.081 | 11.1 (+0.69) | 15.9 (+0.96) | 20.3 (+1.22) | 27.5 (+1.93) | +10.2 % |  | 0 / 0 of 16 |  |
+| base k 1.20 | 30.6 (+3.1) | +3.17 [-1.32, +12.12] | -0.022 [-0.054, +0.009] | 0.776 | 1.158 | 11.8 (+1.39) | 16.8 (+1.89) | 21.5 (+2.38) | 29.4 (+3.77) | +20.1 % |  | 0 / 0 of 16 |  |
+| base k 1.30 | 31.9 (+4.5) | +4.48 [-1.95, +17.34] | -0.032 [-0.078, +0.014] | 0.822 | 1.228 | 12.4 (+2.03) | 17.8 (+2.77) | 22.7 (+3.50) | 31.1 (+5.47) | +29.3 % |  | 0 / 0 of 16 |  |
+
+R41-R56 pooled, c10 (48,048 cells; level = median, (d) = median paired difference against base k 1; ruin = median over 432 universe-point cells):
+
+| arm | CAGR (d) | mean d CAGR [95 %] | mean d Sharpe [95 %] | gross | vol ratio | worst month (d) | 21-day DD (d) | 60-day DD (d) | maxDD (d) | turnover | ruin P(DD>60 %) | universes: CAGR up and worst month not up / maxDD not up | rule: risk / gain |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| base k 1.00 | 26.3 | | | 0.670 | 1.000 | 10.5 | 14.9 | 19.0 | 25.8 | | 33.7 | | |
+| `gt` k 1.00 | 24.2 (-2.0) | -2.06 [-12.21, +4.00] | +0.108 [-0.023, +0.240] | 0.596 | 0.807 | 8.1 (-2.17) | 11.9 (-2.59) | 14.9 (-3.55) | 21.5 (-3.85) | -6.0 % | 16.6 | 5 / 16 of 16 | pass / fail |
+| `gt` k 1.10 | 26.0 (-0.3) | -0.36 [-7.62, +4.36] | +0.095 [-0.031, +0.219] | 0.646 | 0.875 | 8.8 (-1.51) | 12.9 (-1.63) | 16.1 (-2.39) | 23.6 (-1.98) | +3.4 % | 22.2 | 6 / 15 of 16 | pass / fail |
+| `gt` k 1.20 | 27.4 (+0.9) | +0.98 [-4.44, +5.19] | +0.080 [-0.044, +0.205] | 0.691 | 0.938 | 9.3 (-0.90) | 13.8 (-0.77) | 17.3 (-1.32) | 25.4 (-0.25) | +13.3 % | 28.5 | 12 / 8 of 16 | pass / pass |
+| `gt` k 1.30 | 28.8 (+2.4) | +2.27 [-2.35, +7.40] | +0.070 [-0.053, +0.197] | 0.735 | 0.998 | 9.9 (-0.29) | 14.7 (+0.01) | 18.3 (-0.32) | 27.0 (+1.30) | +23.0 % | 34.0 | 7 / 4 of 16 | fail / fail |
+| base k 1.20 | 29.4 (+2.9) | +2.94 [-1.44, +11.72] | -0.024 [-0.055, +0.008] | 0.776 | 1.158 | 11.9 (+1.40) | 16.9 (+1.90) | 21.6 (+2.41) | 29.9 (+3.85) | +20.1 % |  | 0 / 0 of 16 |  |
+
+**Verdict by the registered rule: k 1.20 confirmed.** At k 1.20, both costs: (risk) median paired worst month -0.9, 60-day DD -1.3,
+maxDD -0.3, ruin 28.2 against 32.6 (c10 28.5 against 33.7); (gain) mean d CAGR +1.07 / +0.98 and 13 / 12 of 16 universes with median
+CAGR up at median worst month not up (10 needed). On the same footing k 1.10 passes risk but not gain (median d CAGR -0.4, 6 of 16
+universes: on these universes 1.10 does not yet give back the tilt's CAGR cost of -2.1), and k 1.30 fails risk (maxDD +1.3, ruin 33.6
+against 32.6). What the rule does not show:
+- The gain is a point estimate. Mean d CAGR at 1.20 is +1.07 [-4.35, +5.29] (calibration: +2.5 [-3.4, +6.3]); the median is +1.0
+  against +2.7 in wave 4f.
+- maxDD is at base level, not below it: median -0.3, and only 8 of 16 universes have a median maxDD not above base. Worst month
+  (16/16), 60-day DD (15/16) and the ruin view (15 / 14 of 16) are clearly below.
+- The frozen tilt itself (k 1) on these universes: mean d Sharpe +0.111 [-0.019, +0.242] at c7, +0.108 [-0.023, +0.240] at c10,
+  Sharpe up in 76 % of configurations, 15/16 universes, 4/4 years (+0.01, +0.19, +0.16, +0.16), turnover -6.0 %. Same sign and about
+  three quarters of the size of waves 4b / 4c (+0.145, +0.141), but the interval includes zero and the mean is above the sign
+  placebo's p95 (+0.079) only; `al.klass` with the sign placebo alone gives NEUTRAL (no shuffled-rank placebo was run). The three
+  universe sets share coins and the period, so this is a third overlapping look, not an independent one.
+
+Tilt minus pure gearing at equal risk on R41-R56 (CAGR points, c7 / c10; k' = pure-gearing k with the same median risk measure):
+
+| `gt` k | equal worst month: k', tilt - gear | equal 60-day DD | equal maxDD | equal vol |
+|---|---|---|---|---|
+| 1.00 | below the control grid / below the control grid | 0.75, +3.1 / 0.75, +2.9 | 0.82, +1.5 / 0.82, +1.4 | 0.78, +2.4 / 0.78, +2.3 |
+| 1.10 | 0.80, +3.6 / 0.81, +3.4 | 0.83, +3.1 / 0.83, +2.9 | 0.91, +1.5 / 0.91, +1.4 | 0.85, +2.6 / 0.85, +2.4 |
+| 1.20 | 0.88, +3.4 / 0.88, +3.1 | 0.90, +3.0 / 0.90, +2.8 | 0.99, +1.3 / 0.99, +1.2 | 0.93, +2.4 / 0.93, +2.3 |
+| 1.30 | 0.96, +3.4 / 0.96, +3.1 | 0.97, +3.1 / 0.97, +2.8 | 1.06, +1.5 / 1.07, +1.4 | 1.00, +2.6 / 1.00, +2.4 |
+
+At equal drawdown the tilt is worth +3.1 to +3.6 CAGR points on worst month, +2.8 to +3.1 on 60-day DD, +1.2 to +1.5 on maxDD and +2.3 to
++2.6 on volatility: about 60 % of the wave 4f figures on worst month / 60-day / volatility and 40 % on maxDD. Pure gearing at k 1.20
+has mean d Sharpe -0.022 and worst month, 60-day DD and maxDD above base in all 16 universes.
+
+Production for k = 1.20 (no deploy done):
+- Binance `live_trader` env (and the `stopwatch` copies): `BGM_TREND_PVT` 0.30, `BGM_TREND_CAP` 2.25, `BGM_TREND_PVT_BEAR` 0.225,
+  `BGM_TREND_CAP_BEAR` 1.875, then `jobs.py on-binance` again. KuCoin `trend_producer` argv: `--pvt 0.24 --cap 1.8 --pvt-bear 0.18
+  --cap-bear 1.5`; bkm needs nothing (gross clip 3.0, new exposure blocked above gross 2.5).
+- Binance executor: live-exec's default `--min-margin-level 2.0` stops increases at gross 2.0 and skips every increase while the
+  account's margin level is below 2.0. At k 1.20 the cap is 2.25 (margin level 1.80): the tilted target is above 2.0 on 49 of 1,411
+  rows since 2023-01 (3.5 %, 6 spells; 65 rows / 9 spells over the whole history), by 0.16 of equity on average and 0.25 at most (11 %
+  of the book). Script change: in `scripts/bgm_live_trader.sh`, trend block, add
+  `[ -n "${BGM_TREND_MIN_MARGIN_LEVEL:-}" ] && EXEC_ARGS+=(--min-margin-level "$BGM_TREND_MIN_MARGIN_LEVEL")` and set
+  `BGM_TREND_MIN_MARGIN_LEVEL` in the `live_trader` and `stopwatch` env. It must be <= 1.80 to reach the cap; 1.60 leaves an 11 % fall
+  of the held book at the cap before increases stop (1.70: 5.6 %); live-check blocks the cycle below 1.5. The same budget untilted
+  (FRONTIER L1.50) had a minimum conservative margin level of 1.70 on M11 and 1.60 over 12 universes.
+
+How the gearing arms are built (for the deploy side): they run the producer's own parameters, pv and cap (and the bear pair) x k; the
+book is not multiplied. Because the vol-target ceiling (4) is not scaled, a geared untilted row is k times the ungeared row on 92.1 %
+of the 2,443 rows since 2020 with a book on the Binance settings (96.0 % KuCoin), equal to it on 6.0 % (2.9 %), in between on the rest; mean ratio 1.093
+(1.097) at k 1.10. Mean gross of the target book over the 1,411 rows 2023-01-01 .. 2026-11-11 (M11 research panel):
+
+| settings | base k 1 | `gt` k 1 | base k 1.10 | `gt` k 1.10 | base k 1.20 | `gt` k 1.20 |
+|---|---|---|---|---|---|---|
+| Binance (pv .25, cap 1.875) | 0.8296 | 0.7391 | 0.9003 | 0.7991 | 0.9670 | 0.8635 |
+| KuCoin (pv .20, cap 1.5) | 0.6757 | 0.5869 | 0.7390 | 0.6506 | 0.8000 | 0.7041 |
+
+Pure gearing over the whole harness history (descriptive; the two live configurations on M11, c10, 2020-01-01 .. 2026-11-11, no tilt:
+forecasts start in 2023; cells are CAGR / worst month / maxDD; `runs-agent/regear2/hist.json` has c7 and the per-year drawdowns):
+
+Binance settings:
+
+| k | 2020-26: CAGR / worst month / maxDD / x equity | 2020-22 | 2023-26 | return by year 2020 .. 2026 |
+|---|---|---|---|---|
+| 0.85 | 39.5 / 19.4 / 27.3 / 9.81 | 33.7 / 19.4 / 27.3 | 44.1 / 10.8 / 19.4 | +25 +115 -11 +46 +85 +23 +23 |
+| 0.90 | 38.6 / 20.4 / 29.3 / 9.39 | 25.4 / 20.4 / 29.3 | 49.8 / 12.6 / 21.6 | +12 +100 -12 +55 +92 +27 +25 |
+| 0.95 | 45.3 / 21.4 / 30.2 / 13.00 | 39.1 / 21.4 / 30.2 | 50.3 / 13.8 / 23.7 | +24 +147 -12 +59 +101 +22 +24 |
+| 1.00 | 47.5 / 22.4 / 30.6 / 14.39 | 41.0 / 22.4 / 30.6 | 52.7 / 18.0 / 27.8 | +26 +150 -11 +66 +110 +20 +22 |
+| 1.05 | 48.0 / 23.5 / 31.4 / 14.73 | 39.6 / 23.5 / 31.4 | 54.9 / 17.8 / 26.5 | +27 +135 -9 +67 +117 +22 +22 |
+| 1.10 | 49.2 / 24.5 / 32.1 / 15.61 | 39.9 / 24.5 / 32.1 | 56.9 / 16.8 / 24.6 | +26 +144 -11 +68 +120 +26 +23 |
+| 1.15 | 48.2 / 25.5 / 33.8 / 14.87 | 36.9 / 25.5 / 33.8 | 57.6 / 17.3 / 25.2 | +27 +131 -13 +70 +122 +31 +17 |
+| 1.20 | 46.3 / 26.4 / 35.3 / 13.63 | 32.4 / 26.4 / 35.3 | 58.1 / 15.7 / 24.5 | +16 +130 -13 +77 +115 +32 +16 |
+| 1.25 | 49.4 / 27.0 / 36.8 / 15.74 | 35.7 / 27.0 / 36.8 | 61.1 / 15.9 / 24.7 | +26 +131 -14 +81 +117 +37 +17 |
+| 1.30 | 50.8 / 27.6 / 37.7 / 16.80 | 38.5 / 27.6 / 37.7 | 61.2 / 16.2 / 26.0 | +23 +152 -14 +86 +122 +34 +15 |
+
+KuCoin settings:
+
+| k | 2020-26: CAGR / worst month / maxDD / x equity | 2020-22 | 2023-26 | return by year 2020 .. 2026 |
+|---|---|---|---|---|
+| 0.85 | 34.2 / 12.4 / 21.2 / 7.55 | 31.1 / 12.4 / 21.2 | 36.7 / 10.5 / 18.0 | +25 +96 -8 +36 +74 +18 +20 |
+| 0.90 | 35.9 / 13.0 / 23.4 / 8.20 | 31.8 / 13.0 / 23.4 | 39.1 / 11.6 / 18.7 | +30 +94 -9 +42 +75 +18 +23 |
+| 0.95 | 37.2 / 13.3 / 23.0 / 8.77 | 32.5 / 13.3 / 23.0 | 41.0 / 12.4 / 19.5 | +30 +98 -9 +44 +77 +21 +23 |
+| 1.00 | 40.6 / 14.0 / 24.4 / 10.38 | 36.0 / 14.0 / 24.4 | 44.3 / 10.7 / 17.4 | +32 +115 -11 +43 +91 +25 +21 |
+| 1.05 | 41.1 / 14.8 / 26.2 / 10.61 | 36.2 / 14.8 / 26.2 | 45.0 / 9.9 / 17.6 | +30 +118 -11 +46 +91 +24 +21 |
+| 1.10 | 41.7 / 15.4 / 26.3 / 10.91 | 35.4 / 15.4 / 26.3 | 46.7 / 11.7 / 20.3 | +25 +124 -11 +51 +90 +27 +21 |
+| 1.15 | 47.0 / 17.8 / 27.4 / 14.06 | 43.1 / 17.8 / 27.4 | 50.0 / 13.1 / 22.6 | +28 +160 -12 +55 +98 +26 +23 |
+| 1.20 | 47.6 / 18.5 / 28.8 / 14.46 | 42.0 / 18.5 / 28.8 | 52.0 / 18.1 / 24.9 | +31 +150 -13 +57 +109 +23 +25 |
+| 1.25 | 50.2 / 19.0 / 29.4 / 16.34 | 44.0 / 19.0 / 29.4 | 55.2 / 18.0 / 25.3 | +34 +154 -12 +64 +118 +24 +23 |
+| 1.30 | 51.4 / 19.7 / 29.5 / 17.24 | 45.0 / 19.7 / 29.5 | 56.6 / 17.7 / 24.7 | +35 +153 -11 +65 +121 +24 +24 |
+
+- The CAGR bought by pure gearing is a 2023-26 result. On the Binance settings 2020-22 CAGR falls with k (41.0 at k 1, 39.9 at
+  1.10, 32.4 at 1.20; 2020 alone +26 % -> +16 % at 1.20) and is not monotone (38.5 at 1.30), so the full-history CAGR at 1.20 (46.3) is
+  below k 1 (47.5). On the KuCoin settings 2020-22 falls at 1.10 (36.0 -> 35.4, 2020 +32 % -> +25 %) and rises from 1.15.
+- Risk rises with k in every period: Binance-settings worst month 22.4 -> 24.5 (1.10) -> 26.4 (1.20) -> 27.6 (1.30), maxDD 30.6 -> 32.1
+  -> 35.3 -> 37.7, all set in 2020; KuCoin settings 14.0 -> 15.4 -> 18.5 -> 19.7 and 24.4 -> 26.3 -> 28.8 -> 29.5. The tilted geared book
+  has these same full-history figures, because before 2023 it is the untilted geared book. At 1.20 the Binance settings sit 3.6 points
+  inside the 30 % worst-month limit (7.6 at k 1).
+- Against the producer's own equity (pure gearing 1.10: KuCoin settings 6.698 -> 6.556, Binance settings 9.770 -> 10.893): the harness
+  agrees on the Binance direction (x 14.39 -> 15.61) and on the 2020-22 loss on the KuCoin settings; its KuCoin terminal equity rises
+  slightly (10.38 -> 10.91). The harness cell has the 6 % stop, cooldown and losing-state stop at 10 bp, the producer's equity is the
+  stop-free book at its own cost settings on its own kline store. Either way a single path moves by a few percent of terminal equity at 1.10.
+
+Reading: the registered rule confirms k 1.20 on new 2023+ universes, with a thin maxDD margin and a CAGR gain whose interval includes
+zero. What pays for the gearing is the tilt's risk reduction, observed only in 2023-26; in 2020-22 the same budget without a tilt cost
+CAGR on the Binance settings and raised the worst month to 26 %.

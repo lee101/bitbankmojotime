@@ -56,6 +56,15 @@ if os.environ.get("REGEAR_TESTSET"):   # code-path test on a stored universe, e.
 SIG_U = "/sdb-disk/tradingbots/binance/signal/shift/u"
 
 
+def quiet():
+    """REGEAR_QUIET=HH:MM:SS-HH:MM:SS (UTC): no new simulation is started inside the window (host rule); waits until it has passed."""
+    q = os.environ.get("REGEAR_QUIET")
+    if not q: return
+    import datetime, time
+    a, b = q.split("-")
+    while a <= datetime.datetime.now(datetime.timezone.utc).strftime("%H:%M:%S") < b: time.sleep(5)
+
+
 def kc(c, k):
     """configuration with the risk budget x k: pv and cap (the bear rows and the sim's gross cap follow from them)."""
     return c if k == 1.0 else (round(c[0] * k, 6), round(c[1] * k, 6)) + tuple(c[2:])
@@ -76,7 +85,7 @@ def base_new(Uo, u, c, cf):
     """base arm of a new universe: simulated here with the same binary as the forms (paired), cached in REGEAR_TMP."""
     f = f"{TMP}/base/{u}_{c}.npy"; ft = f"{TMP}/base/{u}_{c}_turn.npy"
     if not os.path.exists(f):
-        E, T, _ = slib.run_arm(Uo, cf, c, True, False, wfun=cv.make_wfun(Uo, cv.Arm("base"))); os.makedirs(f"{TMP}/base", exist_ok=True)
+        quiet(); E, T, _ = slib.run_arm(Uo, cf, c, True, False, wfun=cv.make_wfun(Uo, cv.Arm("base"))); os.makedirs(f"{TMP}/base", exist_ok=True)
         np.save(ft + ".tmp.npy", T); os.replace(ft + ".tmp.npy", ft); np.save(f + ".tmp.npy", E); os.replace(f + ".tmp.npy", f)
         if os.environ.get("REGEAR_TESTSET"): print("base", u, c, "identical to stored" if np.array_equal(E, base_E(u, c)) and np.array_equal(T, base_T(u, c)) else "DIFFERENT from stored", flush=True)
     return np.load(f), np.load(ft)
@@ -192,7 +201,7 @@ def run(us):
                 wf = cv.make_wfun(Uo, arms[kind]); cfk = [kc(c, k) for c in cf]
                 for c in al.COSTS:
                     if os.path.exists(cellf(u, c, a)): continue
-                    E0, m0, (bS0, bC0), T0 = base(c)
+                    quiet(); E0, m0, (bS0, bC0), T0 = base(c)
                     if a == "b1.00": E, T = E0, T0
                     else: E, T, _ = slib.run_arm(Uo, cfk, c, True, False, wfun=wf)
                     m, R = metrics(E, cal); S, Q, L, npm = msums(R, cal); bS, bC = boot_parts(S, Q, L, npm, cnt)
@@ -254,6 +263,42 @@ def gross_view():
                 out[f"{nm}|{aid(kind, k)}"] = r
     json.dump(out, open(f"{OUT}/gross.json", "w"), indent=1)
     for k_, v in out.items(): print(k_, {q: (round(x, 3) if isinstance(x, float) else x) for q, x in v["win"].items()}, "| all max", round(v["all"]["max"], 3), "gt2", v["all"]["gt2"])
+
+
+def hist():
+    """descriptive: the two live configurations over the harness's whole evaluation history of M11 (2020-01-01 .. panel end): pure gearing
+    base(k) by year and by sub-period, `gt`(k) (tilt from 2023, same weights as the registered arms), and how a geared row relates to the
+    ungeared one (pv and cap are scaled, the book is not multiplied: the vol-target ceiling 4 is not scaled)."""
+    Ur = RB.restrict(slib.U("M11")); Uf = slib.U("M11"); cal = slib.Cal(Uf); calr = slib.Cal(Ur); z = np.load(fc_file("M11")); nx = np.array([s not in slib.NOX for s in Ur.sy])
+    Fr = G.frac(RB.fmat(Ur, z, "mkt+r24"), nx); arms = {"gt": gt_arm(Ur, Fr), "b": cv.Arm("base")}; cf = [slib.LIVE, KUC]; names = ["binance", "kucoin"]; out = {}
+    yr = np.array([int(str(np.datetime64(int(t), "s"))[:4]) for t in Uf.td[Uf.k0:]])
+    def stats(R, m):
+        X = np.log1p(R[m]); le = np.concatenate([[0.0], np.cumsum(X)]); ym = (Uf.td[Uf.k0:][m].astype("datetime64[s]").astype("datetime64[M]")).astype(int)
+        ml = np.array([X[ym == q].sum() for q in np.unique(ym)]); return dict(cagr=float(100 * np.expm1(365.25 * X.mean())), ret=float(100 * np.expm1(X.sum())), wm=float(100 * max(-np.expm1(ml.min()), 0)),
+                    mdd=float(100 * -np.expm1(-(np.maximum.accumulate(le) - le).max())), vol=float(100 * R[m].std(ddof=1) * math.sqrt(365)), sharpe=float(R[m].mean() / R[m].std(ddof=1) * math.sqrt(365)), days=int(m.sum()))
+    W1 = {}
+    for kind, ks in (("b", KB), ("gt", KS)):
+        wf = cv.make_wfun(Ur, arms[kind])
+        for k in ks:
+            cfk = [kc(x, k) for x in cf]; g = [np.abs(wf(c_)).sum(1) for c_ in cfk]
+            if kind == "b" and k == 1.0: W1 = {i: g[i] for i in range(2)}
+            for c in al.COSTS:
+                quiet(); E, T, _ = slib.run_arm(Ur, cfk, c, True, False, wfun=wf); R = slib.rets(E, cal)
+                for i, nm in enumerate(names):
+                    r = dict(full=stats(R[i], np.ones(cal.M, bool)), p2020_22=stats(R[i], yr <= 2022), p2023_26=stats(R[i], yr >= 2023), years={str(y): stats(R[i], yr == y) for y in sorted(set(yr.tolist()))},
+                             x_full=float(E[i, -1] / E[i, Uf.k0]), x_sim=float(E[i, -1]), gross_full=float(g[i][Uf.k0:].mean()), gross_2023=float(g[i][Ur.k0:].mean()), turn=float(T[i]))
+                    out[f"{nm}|{c}|{aid(kind, k)}"] = r
+    for kind, ks in (("b", KB),):   # row ratio of the geared untilted book to the ungeared one (rows with a book)
+        wf = cv.make_wfun(Ur, arms[kind])
+        for k in ks:
+            for i, nm in enumerate(names):
+                g = np.abs(wf(kc(cf[i], k))).sum(1); m = W1[i][Uf.k0:] > 0; q = g[Uf.k0:][m] / W1[i][Uf.k0:][m]
+                out[f"{nm}|ratio|{aid(kind, k)}"] = dict(rows=int(m.sum()), mean=float(q.mean()), min=float(q.min()), max=float(q.max()), at_k=float((np.abs(q - k) < 1e-9).mean()), at_1=float((np.abs(q - 1.0) < 1e-9).mean()) if k != 1.0 else 1.0)
+    json.dump(out, open(f"{OUT}/hist.json", "w"), indent=1)
+    for nm in names:
+        for a in [aid("b", k) for k in KB]:
+            r = out[f"{nm}|c10|{a}"]; q = out[f"{nm}|ratio|{a}"]
+            print(nm, a, "c10 full", {x: round(v, 1) for x, v in r["full"].items() if x in ("cagr", "wm", "mdd")}, "x", round(r["x_full"], 2), "| 2020-22", round(r["p2020_22"]["cagr"], 1), "| 2023-26", round(r["p2023_26"]["cagr"], 1), "| ratio", round(q["mean"], 4), round(q["min"], 3), round(q["max"], 3), "at k", round(q["at_k"], 3), flush=True)
 
 
 # ---------------------------------------------------------------- analysis
@@ -439,5 +484,5 @@ if __name__ == "__main__":
     if cmd == "run": run(sys.argv[2].split(",") if len(sys.argv) > 2 else (CONF if os.environ.get("GATE_UNIS") == "CONF" else LEAD))
     elif cmd == "live": live()
     elif cmd == "gross": gross_view()
-    elif cmd in ("draw", "fcmerge", "build", "buildcheck", "ana2"): globals()[cmd]()
+    elif cmd in ("draw", "fcmerge", "build", "buildcheck", "ana2", "hist"): globals()[cmd]()
     else: ana()
