@@ -259,3 +259,24 @@ Reading:
   effect is de-risking, not the forecast.
 - Next for (a): a gross-matched version (re-gross to the base row only when the tilt lowers gross, so the risk is equal) as a
   confirmation on the post-October data and on the 16 SIGNAL universes R9-R24, registered before running.
+
+## Wave 4c: confirmation on R9-R24 (`agent/PREREG-GATE-CONFIRM.md`, 2026-11-18)
+
+16 SIGNAL-confirmation universes the lead never used (`bgm-signal-wt/tools/signal/conf.py`, its panels and books, read only); the frozen
+`mkt+r24` forecast predicted for their 30 coins (prediction only). 2023-01 .. 2026-10. 20 placebo draws for the co-primaries.
+
+| form | cost | mean d Sharpe [95 %] | share | d bp/day | years + (2023-26) | universes + | placebo p95 / max | turnover | ruin dd60 (M11) | class |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `gt` frozen (co-primary) | c7 | +0.141 [+0.024, +0.263] | 81 % | -0.62 [-2.34, +0.89] | 4/4 (+0.01 +0.18 +0.20 +0.24) | 15/16 | +0.029 / +0.029 | -6.6 % | 41.1 -> 24.3 | INNOVATION |
+| `gt` frozen | c10 | +0.138 [+0.020, +0.260] | 80 % | -0.60 | 4/4 | 15/16 | +0.025 / +0.027 | -6.6 % | 41.2 -> 24.6 | INNOVATION |
+| `gtr` risk-matched (co-primary) | c7 | +0.065 [-0.017, +0.163] | 67 % | -0.17 | 3/4 | 12/16 | -0.001 / +0.003 | +2.7 % | 41.1 -> 35.2 | NEUTRAL |
+| `gtr` | c10 | +0.060 [-0.022, +0.159] | 66 % | -0.18 | 3/4 | 12/16 | -0.005 / -0.001 | +2.7 % | 41.2 -> 35.5 | NEUTRAL |
+| `gtb` band per config (secondary) | c7 | +0.144 [+0.028, +0.266] | 82 % | -0.60 | 4/4 | 16/16 | +0.032 / +0.034 | -6.9 % | 41.1 -> 25.2 | INNOVATION |
+| `gtb` | c10 | +0.141 [+0.024, +0.263] | 81 % | -0.57 | 4/4 | 16/16 | +0.029 / +0.031 | -6.9 % | 41.2 -> 25.6 | INNOVATION |
+
+Bar: `gt` passes (INNOVATION at both costs, 15/16 universes, turnover -6.6 %), so the result is CONFIRMED by the registered rule (two
+co-primaries, either may pass). The risk-matched form keeps about half the gain and does not separate, and it adds +2.7 % turnover.
+So part of `gt`'s Sharpe comes from the forecast choosing which coins to cut, which lowers risk. Band per config changes nothing.
+Post-October data: none usable (the forecaster's input cache ends 2026-10-31); folded into the February 2027 forward scoring.
+Integration design (flag default off, not installed, licence blocker): binancegomojo branch `research/fcast-tilt`,
+`docs/experiments/FCAST-TILT-integration.md`.

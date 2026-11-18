@@ -55,6 +55,9 @@ Numbers quoted here are in `bench/LEADERBOARD.md`; licences in `docs/SCOPE.md`.
    INNOVATION on the pooled harness at c7 / c10 (+0.145 / +0.141 d Sharpe, placebo max +0.037, 4/4 years, turnover -4.9 %). The entry
    gate is neutral; the exit hint is de-risking that the placebo matches. Next: a gross-matched tilt on post-October data and on
    R9-R24, registered first; then the licence question (the research-tier weights cannot go to the bots).
+   CONFIRMED 2026-11-18 on R9-R24 (`agent/PREREG-GATE-CONFIRM.md`): +0.141 / +0.138 d Sharpe, 15/16 universes, turnover -6.6 %;
+   risk-matched co-primary +0.065, not separated. Producer design (default off, not installed): binancegomojo
+   `research/fcast-tilt`. Blocker: research-tier weights (CC BY-NC-SA data) cannot size live trades; owner decision on data licence.
    Earlier wording: bot use without the turnover penalty: use the forecast only at the bot's own rebalance points (entry ranking among new trend
    candidates, or a tie-break on top-k selection) instead of a daily tilt; and a rank-change band. One prereg on the ALGOS harness.
 3. Permissive tier for the ranker: the gain needs cross-sections (market-state inputs + grouped loss), which synthetic independent
