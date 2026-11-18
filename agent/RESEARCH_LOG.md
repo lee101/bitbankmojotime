@@ -298,3 +298,36 @@ Forecasts from Kraken bars for 21/30 R9-R24 coins and 26/36 ALGOS coins, to 2026
 Verdict: does not survive (registered bar). The coverage-matched reference fails the same way and lower, so the cause is coverage
 (9 coins and October missing), not the Kraken training data, which carries the ranking information at the same IC.
 Outputs `runs-agent/lic/`.
+
+## Wave 4e: licence route 2, `mkt+r24` on KuCoin API klines (`agent/PREREG-LIC2.md`, 2026-11-18)
+
+Terms quotes for KuCoin and OKX and the full tables: `agent/LICENCE-ROUTES.md` (sections 1, 5, 6). KuCoin public REST 1 h klines,
+USDT pairs: 808 listed, 780 after the exclusions, 9,204 requests in 43 min (3.6 requests/s, 4 connections, no 429), bars to
+2026-11-18 09:00 UTC. Pool 232 (31 listed by 2020-01, 67 by 2021-01, 187 by 2022-01; survivors only, delisted pairs are not served),
+eval 64, held-out 16. Same recipe, 2 seeds, 333 + 330 s GPU. Forecasts from KuCoin bars for 27/30 R9-R24 coins (no RVN: delisted;
+no QTUM, ZRX: KuCoin USDT pairs start 2024-11 and 2023-11) and 33/36 ALGOS coins, all from the first day, October 2026 included
+(90 % and 92 % of the Binance forecast cells). KuCoin hourly returns against Binance on 146 shared symbols: correlation 0.97 median,
+0.91 at the 10th percentile, no missing hours.
+
+| measure | KuCoin weights, KuCoin bars (primary) | Binance `mkt+r24`, same cells | S1: Kraken weights, Kraken bars + KuCoin bars for 8 coins | S2: Kraken weights, KuCoin bars |
+|---|---|---|---|---|
+| val 24 h IC (KuCoin seen symbols) | +0.091 [+0.080, +0.103] | | | |
+| ALGOS next-day IC | +0.043 [+0.031, +0.056] | +0.069 [+0.057, +0.082] | +0.065 [+0.052, +0.078] | +0.044 [+0.032, +0.056] |
+| rho with trend score | -0.082 | -0.134 | -0.024 | -0.026 |
+| R9-R24 coins with a forecast | 27/30 | 27/30 | 29/30, to 2026-09-30 | 29/30 |
+| R9-R24 `gt` c7 / c10 | +0.069 [-0.047, +0.186] / +0.066, 11/16, placebo max +0.022, NEUTRAL | +0.120 [+0.005, +0.241] / +0.116, 15/16, placebo max +0.019, NEUTRAL (+) | +0.143 [+0.022, +0.260] / +0.140 [+0.019, +0.257], 14/16, placebo max +0.011, INNOVATION at c7, NEUTRAL (+) at c10 (share 79.7 %) | +0.098 [-0.011, +0.209] / +0.095, 13/16, placebo max +0.015, NEUTRAL |
+| R9-R24 `gtr` c7 / c10 | +0.013 [-0.067, +0.100] / +0.008, 10/16, turnover +3.5 %, NEUTRAL | | | |
+| turnover (`gt`) | -4.7 % | -6.0 % | -4.1 % | -4.0 % |
+| ruin dd60 (M11, `gt` c7) | 41.1 -> 25.1 | 41.1 -> 24.3 | 41.1 -> 27.3 | 41.1 -> 28.5 |
+
+S3 (primary plus OKX bars for QTUM, RVN, ZRX; 30/30 coins): `gt` +0.093 [-0.024, +0.209] / +0.090, 12/16, placebo max +0.038, NEUTRAL.
+
+Verdict: does not survive (registered bar): no co-primary passes, no interval above zero. No secondary meets the bar; S1 is "lean"
+(INNOVATION at c7, 79.7 % share at c10 against the 80 % line) and needs its own confirmation.
+Reading: this time the loss is not mainly coverage (the Binance model on the same 27 coins keeps +0.120 and 15/16). It follows the
+inference bars: forecasts computed from KuCoin bars have a third less next-day IC on the Binance-priced harness (+0.043 / +0.044
+with either set of weights, against +0.069 and +0.065), although KuCoin's own validation IC is high. Kraken weights with Kraken bars,
+and KuCoin bars only for the 8 coins Kraken lacks, reach the full-coverage Binance level (+0.143 against +0.141): wave 4d's NEUTRAL
+was coverage. Post-October read (16 days, KuCoin returns): mean IC +0.127, 69 % of days positive (2023-01 .. 2026-10: +0.057, 60 %);
+consistent in sign, no interval.
+Not tested: why KuCoin input bars lose the IC; S1 on universes or dates it has not touched. Outputs `runs-agent/lic2/`.

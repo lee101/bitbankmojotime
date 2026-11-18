@@ -19,6 +19,8 @@ conclusion beyond the text. Raw copies were kept in the session scratchpad, not 
 | CoinGecko | aggregated hourly price / volume / cap (no hourly OHLC); Demo 1 year, Basic 2 years, Analyst+ from 2018; thousands of coins | paid plans list "License: Commercial"; reliance for "trading" at own risk | not addressed | may "charge for your services and products that incorporate" the API; no re-distributing API access | Demo free (attribution); Basic USD 35/mo; Analyst USD 129/mo |
 | Tardis.dev | tick trades / books for Binance spot, Kraken, OKX, Coinbase etc.; candles derivable | "Permitted Use ... includes trading, investment, research and risk management" | allowed: "may also develop, train and fine-tune its own models on the Data ... provided that only Customer Users can use them"; Coinbase data excluded (cl. 23) | no model or weights to anyone outside Customer Users (9.5(b)) | spot Solo USD 900/mo, Academic 450, Professional 1,350; all exchanges 1,200 Solo |
 | Kaiko | aggregated and per-venue OHLCV, broad history | "Client's internal business purposes, including the creation of derived works to be used internally" | not addressed beyond internal derived works | client-facing derived products need consent | enterprise, by quote |
+| KuCoin (public REST klines; the owner's trading venue; wave 4e) | 1 h klines per USDT pair from its listing to now, 1,500 rows per request; 808 USDT pairs listed now, 232 of them listed by 2022-12 and all pass the liquidity filter (31 by 2020-01, 67 by 2021-01, 187 by 2022-01); delisted pairs are not served (measured) | no clause on trading with the data; Terms of Use bar "commercial use of the Platform or any content thereof" and any use "not explicitly permitted by the Terms of Use" (art. 91); the API page offers the API for "quantitative trading systems" | not addressed | no "derivatives of the Platform or content thereof"; no systematic "collections, compilations, databases" without written permission (art. 91) | free |
+| OKX (public REST candles; wave 4e) | 1 h candles, 100 rows per request, hourly history from 2018-01 for old pairs; 491 USDT pairs listed now (pair list measured; bars fetched for 3 coins only) | Market Data "solely for your own personal, non-commercial trading and account management purposes" (9.4); trading "for your own account, even if profitable, does not constitute commercial resale" (9.3) | barred for a model "that is intended to be commercialized or made available to third parties" (9.4(c)) | no making Market Data "available to any third party"; no "competing data product" (9.4) | free; "separate data licensing agreement" for large-scale or commercial access |
 
 ### Quotes and URLs
 
@@ -241,3 +243,121 @@ ranking effect. A side finding: the Kraken forecast does not correlate with the 
 
 Artifacts (private, git-ignored): `runs-agent/lic/` (cache, universe, checkpoints `r24/ckpt/mkt+r24_s{0,1}_F*.pt`, forecasts,
 gate JSONs `gate/gate_gt.json`, `gate/gate_gtr.json`, `gate_ref/gate_gt.json`, run scripts `run.sh`, `gate.sh`).
+
+## 5. Test: `mkt+r24` on the owner's venue API bars, KuCoin 1 h klines (`agent/PREREG-LIC2.md`, wave 4e)
+
+Source: KuCoin public REST `GET /api/v1/market/candles?type=1hour`, USDT pairs, no key. 808 USDT pairs in the list, 780 after the
+registered exclusions; 9,204 requests in 43 minutes on 4 kept-alive connections (3.6 requests/s, capped at 5), no 429 answer;
+completed bars to 2026-11-18 09:00 UTC; cache `runs-agent/lic2/cache` (never published). 232 pairs have a bar before 2023 and all of
+them pass the liquidity filter (a bar in every hour of the 2022 window): pool 232, evaluation 64, held-out 16, train 216; listed by
+January 2020 / 2021 / 2022: 31 / 67 / 187. The endpoint serves nothing for pairs KuCoin delisted, so the pool is survivors only. One
+stablecoin that the fixed exclusion lists do not name (USDD) is in the pool. Same recipe as waves 4 and 4d, seeds 0 and 1, 333 s +
+330 s GPU under the 3.2 GB cap, no deviation from the recipe. OKX `history-candles` was used for three coins only (QTUM, RVN, ZRX;
+2,148 requests).
+
+Data check, 2023-01 .. 2026-10, pool symbols present in both caches (reported; no pair was dropped because of it):
+
+| against | shared | hourly-return correlation: median (10th percentile, lowest) | its bar hours missing in KuCoin | KuCoin bar hours missing in it (median) | price gap (median) |
+|---|---|---|---|---|---|
+| Binance cache | 146 | 0.969 (0.914, 0.741); harness coins lowest ONE 0.826, IOST 0.838 | none | 0 % (up to 70 % for one symbol) | 9 bp |
+| Kraken cache | 138 | 0.881 (0.683, -0.08 for USDD); harness coins lowest NEO 0.598 | none | 15 % | 20 bp |
+| OKX fill bars against Binance | 3 | QTUM 0.985, ZRX 0.983, RVN 0.971 | (Binance bar hours missing in OKX: none) | | 6-7 bp |
+
+Coverage (registered report; Binance forecast file = 42,000 R9-R24 cells, 50,341 ALGOS cells):
+
+| forecast | R9-R24 coins of 30 | from 2023-01-01 | cells | October 2026 | ALGOS coins of 36 | cells |
+|---|---|---|---|---|---|---|
+| primary: KuCoin-trained, KuCoin bars | 27 (no QTUM, RVN, ZRX) | 27 | 37,800 (90.0 %) | yes | 33 (no ICX, RVN, ZRX) | 46,200 (91.8 %) |
+| S1: Kraken weights, Kraken bars + KuCoin bars for the coins outside the Kraken pool | 29 (no RVN) | 26 (BAND, COMP one day, ZRX two days later) | 37,805 (90.0 %) | no (bars end 2026-09-30) | 35 (no RVN) | 45,928 (91.2 %) |
+| S2: Kraken weights, KuCoin bars only | 29 (no RVN; ZRX from 2024-08-06, QTUM from 2025-07-27) | 27 | 39,079 (93.0 %) | yes | 34 (no ICX, RVN) | 47,017 (93.4 %) |
+| S3: primary + OKX bars for QTUM, RVN, ZRX | 30 | 30 | 42,000 (100 %) | yes | 35 (no ICX) | 49,000 (97.3 %) |
+| wave 4d: Kraken weights, Kraken bars | 21 | 18 | 26,853 (63.9 %) | no | 26 | 33,607 (66.8 %) |
+
+Why KuCoin misses three R9-R24 coins: RVN-USDT (and ICX-USDT) are delisted and the endpoint serves no bars for them; KuCoin's
+QTUM-USDT and ZRX-USDT pairs start in 2024-11 and 2023-11, after the pool cut-off (first bar by 2022-12). Late but early enough:
+HBAR and BAND 2021-09, IOTA 2021-12, TFUEL 2022-03. In S1 the 8 coins filled from KuCoin bars are HBAR, IOTA, NEO, ONE, TFUEL, VET,
+ZEN, ZIL (QTUM and ZRX are in the Kraken pool).
+
+Forecast quality:
+
+| measure | primary: KuCoin weights, KuCoin bars | Binance `mkt+r24`, the primary's cells | S1: Kraken weights, Kraken + KuCoin bars | S2: Kraken weights, KuCoin bars |
+|---|---|---|---|---|
+| validation 24 h rank IC, KuCoin seen symbols (48), 8,544 origins | +0.091 [+0.080, +0.103]; registered Binance `ohlc+cal` on the same rows +0.079, d +0.012 [+0.003, +0.022] | | | |
+| next-day IC on the ALGOS harness (14 universes, 19,484 universe-days) | +0.043 [+0.031, +0.056] | +0.069 [+0.057, +0.082] | +0.065 [+0.052, +0.078] | +0.044 [+0.032, +0.056] |
+| rho with the trend score | -0.082 [-0.098, -0.065] | -0.134 [-0.153, -0.115] | -0.024 [-0.047, -0.002] | -0.026 [-0.045, -0.007] |
+| per-day rank correlation with the Binance forecast, R9-R24 cells | 0.70 (ALGOS cells 0.70) | | 0.69 | 0.69 |
+
+Tilt on R9-R24 (2023-01 .. 2026-10, form `gt` unless marked, 20 placebos each, base arms from a private copy of `runs-agent/r24/confirm`):
+
+| forecast / form | cost | mean d Sharpe [95 %] | share | years + (2023-26) | universes + | placebo p95 / max | turnover | ruin dd60 (M11) | class |
+|---|---|---|---|---|---|---|---|---|---|
+| primary `gt` (co-primary) | c7 | +0.069 [-0.047, +0.186] | 68 % | 3/4 (-0.05 +0.07 +0.14 +0.18) | 11/16 | +0.019 / +0.022 | -4.7 % | 41.1 -> 25.1 | NEUTRAL |
+| primary `gt` | c10 | +0.066 [-0.050, +0.183] | 67 % | 3/4 | 11/16 | +0.016 / +0.019 | -4.7 % | 41.2 -> 25.4 | NEUTRAL |
+| primary `gtr` risk-matched (co-primary) | c7 | +0.013 [-0.067, +0.100] | 55 % | 3/4 (-0.10 +0.03 +0.04 +0.11) | 10/16 | -0.018 / -0.012 | +3.5 % | 41.1 -> 36.8 | NEUTRAL |
+| primary `gtr` | c10 | +0.008 [-0.072, +0.096] | 54 % | 3/4 | 10/16 | -0.022 / -0.016 | +3.5 % | 41.2 -> 37.0 | NEUTRAL |
+| S1: Kraken weights, Kraken bars + KuCoin bars for 8 coins (29/30, no October) | c7 | +0.143 [+0.022, +0.260] | 80.3 % | 4/4 (+0.11 +0.17 +0.19 +0.15) | 14/16 | +0.007 / +0.011 | -4.1 % | 41.1 -> 27.3 | INNOVATION |
+| S1 | c10 | +0.140 [+0.019, +0.257] | 79.7 % | 4/4 | 14/16 | +0.004 / +0.008 | -4.1 % | 41.2 -> 27.8 | NEUTRAL (+) |
+| S2: Kraken weights, KuCoin bars only (29/30) | c7 | +0.098 [-0.011, +0.209] | 73 % | 4/4 (+0.01 +0.10 +0.14 +0.18) | 13/16 | +0.015 / +0.015 | -4.0 % | 41.1 -> 28.5 | NEUTRAL |
+| S2 | c10 | +0.095 [-0.014, +0.206] | 73 % | 4/4 | 13/16 | +0.013 / +0.013 | -4.0 % | 41.2 -> 28.6 | NEUTRAL |
+| S3: primary + OKX bars for QTUM, RVN, ZRX (30/30) | c7 | +0.093 [-0.024, +0.209] | 71 % | 3/4 (-0.03 +0.09 +0.18 +0.20) | 12/16 | +0.034 / +0.038 | -4.9 % | 41.1 -> 25.1 | NEUTRAL |
+| S3 | c10 | +0.090 [-0.028, +0.207] | 70 % | 3/4 | 12/16 | +0.031 / +0.035 | -4.9 % | 41.2 -> 25.4 | NEUTRAL |
+| reference: Binance `mkt+r24`, the primary's cells (27/30) | c7 | +0.120 [+0.005, +0.241] | 78 % | 3/4 (-0.03 +0.17 +0.18 +0.22) | 15/16 | +0.018 / +0.019 | -6.0 % | 41.1 -> 24.3 | NEUTRAL (+) |
+| reference | c10 | +0.116 [+0.001, +0.238] | 77 % | 3/4 | 15/16 | +0.015 / +0.016 | -6.0 % | 41.2 -> 24.6 | NEUTRAL (+) |
+| (wave 4c) Binance `mkt+r24`, full coverage | c7 | +0.141 [+0.024, +0.263] | 81 % | 4/4 | 15/16 | +0.028 / +0.029 | -6.5 % | 41.1 -> 24.3 | INNOVATION |
+| (wave 4d) Kraken weights, Kraken bars (21/30) | c7 | +0.065 [-0.049, +0.180] | 68 % | 4/4 | 12/16 | -0.016 / -0.006 | -3.0 % | 41.1 -> 28.6 | NEUTRAL |
+
+Verdict by the registered bar: does not survive. Neither co-primary passes and neither has its interval above zero, so it is not
+"lean" either; `gtr` also adds +3.5 % turnover. No secondary meets the bar. S1 is INNOVATION at c7 and misses the class at c10 on
+the share line (79.7 % against 80 %), with the interval above zero at both costs: "lean" in the bar's terms, and a secondary in any
+case, so it needs its own confirmation. Every row is above all 20 of its placebos.
+
+What the rows say:
+- Coverage is not the main loss this time. The Binance model on the primary's 27 coins keeps +0.120 [+0.005, +0.241] and 15/16
+  universes (the three missing coins cost +0.141 -> +0.120 and the class, share 78 %); the KuCoin forecast on the same cells gets
+  +0.069. Filling the three coins from OKX (S3, 30/30) gives +0.093, still NEUTRAL. The registered reading had only two cases
+  (reference fails = coverage, reference passes = model); the reference landed between them, so both parts are reported.
+- The loss follows the bars the forecast is computed from, not the bars it was trained on. On the ALGOS harness the next-day IC is
+  +0.043 for KuCoin weights on KuCoin bars and +0.044 for Kraken weights on KuCoin bars, against +0.069 for the Binance model on the
+  same cells and +0.065 for Kraken weights on (mostly) Kraken bars. About a third of the ranking information is lost when the inputs
+  are KuCoin bars. KuCoin's own validation IC is high (+0.091), so the model does rank KuCoin's next-day returns; the harness books
+  are priced on Binance. KuCoin hourly returns track Binance at 0.97 (median), 0.83 for the thinnest harness coin. Why that gap is
+  enough to lose a third of the IC was not tested.
+- Kraken weights with KuCoin bars only for the coins Kraken lacks (S1) reach the level of the Binance model at full coverage:
+  +0.143 against +0.141, 14/16 universes, 4/4 years, without October 2026 and without RVN. This agrees with wave 4d's reading that
+  its NEUTRAL was coverage. It is one of four further looks in this wave (S1, S2, S3, reference), on universes now used in three
+  waves.
+
+After October 2026 (registered consistency read, no interval claimed): KuCoin-trained forecast, F4 checkpoints, 16 origins
+2026-11-01 .. 2026-11-16, 41 coins, per-day IC against the next 24 h KuCoin return: mean +0.127, 69 % of days above zero; the same
+statistic over 2023-01 .. 2026-10 (1,400 days) is +0.057 and 60 %. Same sign; nothing more can be said from 16 days.
+
+Notes on the run: the first-bar request needed an explicit `startAt` (found on BTC-USDT before any bar was stored); the first fetch
+was stopped after about two minutes and resumed with kept-alive connections (same snapshot hour); RVN was fetched from OKX before
+the cache was built, QTUM and ZRX after it showed them outside the pool; the gate resume caches (21 GB) were deleted after the JSONs
+were written.
+
+## 6. Recommendation after wave 4e (owner decision; not a legal opinion)
+
+1. Training and inferring on KuCoin API bars does not reproduce the tilt. It is not an integration candidate, whatever the reading
+   of KuCoin's terms.
+2. The candidate that the numbers point to is S1's set-up: the Kraken-trained weights (section 4, point 1), Kraken bars as inputs
+   for the coins Kraken lists and for the market series, and KuCoin API bars only for the 8 R9-R24 coins Kraken lacks. It uses no
+   KuCoin or OKX bar for training and no OKX bar at all; KuCoin bars enter as inference inputs only. It is not confirmed: it
+   needs a registered test on universes or dates it has not touched (the February 2027 forward scoring, or new universes).
+3. What a live job would need as the inference bar source for that set-up: (a) hourly Kraken bars for the 144 training-pool
+   symbols (market mean, dispersion, breadth) and the 21 Kraken-listed forecast coins, with 6,200 h of history per forecast coin.
+   Kraken's public `OHLC` endpoint returns only the most recent 720 hourly bars (checked 2026-11-18: one request for XBTUSD came
+   back from 2026-10-19), so the cache has to be seeded from the OHLCVT archive (it ends 2026-09-30; the next quarterly file or the
+   public `Trades` endpoint has to close the gap) and topped up at least every 30 days. (b) KuCoin `GET /api/v1/market/candles?type=1hour` for HBAR, IOTA, NEO, ONE, TFUEL, VET, ZEN, ZIL: five
+   requests per coin to seed 6,200 h, one request per coin per day afterwards. (c) Only completed bars; the forecast uses the
+   23:00 UTC bar and is applied at 00:00 UTC. (d) RVN is outside the Kraken pool and KuCoin serves no bars for it; it stays untilted
+   (multiplier 1) or takes OKX bars (S3: the three-coin OKX fill moved the point estimate from +0.069 to +0.093, inside the noise).
+4. The terms text for the two venues is in section 1 and under "Quotes and URLs": KuCoin has no API, trading-use or
+   machine-learning clause and reserves the content of the Platform against commercial use and systematic collection; OKX limits
+   Market Data to "your own personal, non-commercial trading and account management purposes" and bars training only for models
+   "intended to be commercialized or made available to third parties".
+
+Artifacts (private, git-ignored): `runs-agent/lic2/` (KuCoin download `dl/`, cache, universe, checkpoints
+`r24/ckpt/mkt+r24_s{0,1}_F*.pt`, forecasts `r24/botpred*.npz`, `s1/`, `s2/`, `s3/`, `ref/`, gate JSONs `gate/gate_gt.json`,
+`gate/gate_gtr.json`, `gate_s{1,2,3}/gate_gt.json`, `gate_ref/gate_gt.json`, `algos_*/corr.json`, `sanity_*.json`, `val.json`,
+scripts `run.sh`, `gate.sh`, `corr.sh`).
