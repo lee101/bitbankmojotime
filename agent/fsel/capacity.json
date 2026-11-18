@@ -1,0 +1,13 @@
+{
+ "book": "sel N 50 K 10 f168, lead segment, 5,000 USDT equity",
+ "orders": 1792,
+ "orders_per_week": 14.688524590163935,
+ "median_usdt": 127.78693438259396,
+ "p5_usdt": 6.679133711652021,
+ "share_below_5_5_usdt": 0.04241071428571429,
+ "max_usdt": 633.1127765030976,
+ "participation_median": 2.4014530731946652e-06,
+ "participation_p95": 2.9097157984263624e-05,
+ "participation_max": 0.0001419892801525401,
+ "min_30d_median_daily_qv_usdt": 3778234.1237500003
+}
