@@ -84,7 +84,7 @@ def fetch_one(sym, base, end, dl):
     fo = os.path.join(dl, sym + ".json")
     if os.path.exists(fo):
         return json.load(open(fo))
-    wk = kc(sym, "1week", 0, end)
+    wk = kc(sym, "1week", D.eh(2017) * 3600, end)                      # startAt=0 is read as "absent" (latest 100 rows only)
     meta = dict(symbol=sym, base=base, served=wk is not None and len(wk) > 0, full=False, bars=0)
     if meta["served"]:
         f = int(wk[:, 0].min()) - 8 * 86400
