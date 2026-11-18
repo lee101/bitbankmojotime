@@ -385,3 +385,98 @@ Reading:
 - Not done (not registered, so not run): risk-matched arms on the lead universes. A registered test of "equal risk, longer horizon"
   would be the next step for this line, with R25-R40 still untouched. Limits: one lead search on universes and a period used in
   waves 4-4c; the long models' test-row medians were scored here (their h 1 / 6 / 24 quantiles were not added to the leaderboard).
+
+## Wave 6: the 168 h forecast as a weekly selection rank on a wide point-in-time universe (`agent/PREREG-FSEL.md`, 2026-11-18)
+
+Question: wave 5 used `mkt+r168` only as a multiplier on the M11 trend book. Can it do what a liquidity rule could not (UNIV): pick
+which names of a wide point-in-time universe to hold, at a weekly holding period that matches its horizon?
+Set-up: UNIV construction read only (monthly top N by 30-day median quote volume, listed >= 180 d, delisted pairs included; N 30 /
+50, panels X30 / X50, 222 names in the window, 79 of them listed after 2022-12 and predicted from the UNIV hourly archive, bars
+identical to the forecaster's cache where both exist). Out-of-sample fold forecasts, origin = the bar closing at the Monday 00:00 UTC
+decision. Lead segment 2023-01-02 .. 2025-05-01 (122 Mondays, 28 months); every tradable member had a forecast (29.9 / 49.9 ranked
+per week). Forms: `sel` weekly top-K equal weight under the producer's vol target and bear rows; `tsel` the trend book (trend-wf,
+live cell) restricted to the forecast top-K; `blend` 50 / 50 of `sel` and the live book; `selh` `sel` with rank hysteresis; `ls`
+top-K minus bottom-K (information only). Reference = the live book: M11 trend + 24 h tilt at k 1.10, live Binance settings. Placebos,
+20 draws each: shuffled ranks, persistent random K names, circular time shift of the forecast panel. Baselines: the same forms
+driven by 7-day and 28-day momentum and by `mkt+r24`. `train/rankh.py wide`, `tools/fsel.py`, `tools/fsel_trend.py`; evidence
+`agent/fsel/`.
+
+Checks: numpy engine against `bgm trend-sim` on one weight file: daily-return correlation 0.999999, largest daily difference 1.6 bp,
+Sharpe 0.838 / 0.840. Leak checks pass: every forecast's origin bar closes at its decision time (138,059 rows); the 2024-06 ranking
+recomputed from daily bars before the ranking day equals the stored one (same top 50 in order); forecasts at three decision dates
+recomputed with every later bank value replaced by noise move by at most 3e-8 on a 1e-3 scale (batch-order rounding; restore check
+0); form-1 weights to 2024-03-04 from inputs cut there are identical. The wide pass reproduces the wave-5 bot-panel forecasts
+(4e-6 of scale).
+
+Information on the wide universe (lead segment, next-week return, month-block intervals):
+
+| N | rank | weekly rank IC | circular-shift IC, mean (min .. max of 20) | top 5 minus universe, bp / week | universe minus bottom 5, bp / week |
+|---|---|---|---|---|---|
+| 30 | `mkt+r168` | +0.098 [+0.043, +0.152] | +0.061 (+0.020 .. +0.112) | +10 [-104, +110] | -24 [-115, +61] |
+| 30 | `mkt+r24` | +0.065 [+0.011, +0.116] | | -14 [-110, +76] | -51 [-154, +45] |
+| 30 | momentum 7 d / 28 d | +0.009 / +0.018 | | +36 / +60 [-12, +135] | +27 / +94 [+29, +160] |
+| 50 | `mkt+r168` | +0.084 [+0.041, +0.125] | +0.051 (+0.016 .. +0.093) | +12 [-95, +113] | +13 [-159, +168] |
+| 50 | `mkt+r24` | +0.053 [+0.009, +0.096] | | -40 [-149, +64] | +30 [-85, +139] |
+| 50 | momentum 7 d / 28 d | -0.002 / -0.006 | | +28 / +38 | +97 [+27, +177] / +47 |
+
+Lead segment at 10 bp. Live book: Sharpe 2.03, CAGR +71.5 %, worst month -10.1 %, 60-day and max drawdown 18.8 %, turnover 29.8 /
+year, gross 0.76. Sharpe columns: the form driven by each rank, then the three placebo ranges (min .. max of 20 draws):
+
+| form | N | K | `mkt+r168` | `mkt+r24` | mom 7 d | mom 28 d | shuffled | random K | circular shift | CAGR % | worst month % | 60-day DD % | max DD % | turnover / yr | gross | d Sharpe vs live [95 %] | d CAGR vs live, points [95 %] |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `sel` | 30 | 5 | +1.00 | +0.39 | +0.80 | +0.84 | +0.09 .. +1.12 | +0.12 .. +1.25 | +0.57 .. +1.78 | +25.7 | -10.1 | -18.9 | -23.3 | 23.2 | 0.44 | -1.03 [-1.92, -0.09] | -45.9 [-124.3, -1.9] |
+| `sel` | 30 | 10 | +0.82 | +0.78 | +0.63 | +0.70 | +0.38 .. +1.00 | +0.47 .. +1.05 | +0.48 .. +1.21 | +18.0 | -11.0 | -18.5 | -24.6 | 16.1 | 0.40 | -1.21 [-1.99, -0.40] | -53.5 [-126.5, -15.5] |
+| `sel` | 50 | 5 | +0.85 | +0.27 | +0.59 | +0.51 | +0.12 .. +1.26 | -0.07 .. +1.32 | +0.55 .. +1.73 | +20.5 | -8.2 | -19.1 | -23.7 | 26.5 | 0.43 | -1.18 [-2.01, -0.25] | -51.0 [-130.2, -7.1] |
+| `sel` | 50 | 10 | +0.82 | +0.31 | +0.79 | +0.53 | +0.30 .. +1.23 | -0.03 .. +1.29 | +0.56 .. +1.40 | +18.6 | -10.2 | -19.1 | -23.7 | 20.3 | 0.41 | -1.21 [-2.09, -0.32] | -52.9 [-129.3, -12.8] |
+| `tsel` | 30 | 5 | +1.72 | +0.26 | +1.10 | +1.09 | -0.59 .. +1.13 * | +0.00 .. +1.60 * | +0.72 .. +1.97 * | +60.9 | -4.4 | -17.1 | -19.5 | 33.5 | 0.49 | -0.30 [-1.20, +0.71] | -10.6 [-82.9, +49.0] |
+| `tsel` | 30 | 10 | +1.16 | +0.44 | +0.56 | +0.42 | -0.41 .. +1.32 * | -0.06 .. +1.39 * | +0.45 .. +1.83 * | +30.6 | -7.0 | -15.4 | -23.2 | 32.0 | 0.49 | -0.87 [-1.72, +0.05] | -40.9 [-114.3, +1.4] |
+| `tsel` | 50 | 5 | +1.53 | -0.12 | +0.95 | +1.04 | -0.21 .. +1.65 * | +0.14 .. +1.65 * | +0.54 .. +1.82 * | +53.5 | -7.6 | -13.2 | -20.2 | 39.3 | 0.47 | -0.50 [-1.65, +0.70] | -18.0 [-98.8, +52.3] |
+| `tsel` | 50 | 10 | +1.18 | -0.34 | +0.28 | +0.89 | -0.84 .. +1.03 * | -0.14 .. +1.73 * | +0.18 .. +1.47 * | +30.9 | -6.2 | -17.9 | -19.4 | 34.1 | 0.52 | -0.85 [-1.89, +0.27] | -40.6 [-115.4, +9.5] |
+| `blend` | 30 | 5 | +1.67 | +1.46 | +1.66 | +1.69 | +1.33 .. +1.79 | +1.33 .. +1.85 | +1.51 .. +2.09 | +47.6 | -10.1 | -18.8 | -20.1 | | | -0.36 [-0.75, +0.08] | -23.9 [-70.5, -0.2] |
+| `blend` | 30 | 10 | +1.59 | +1.59 | +1.56 | +1.60 | +1.43 .. +1.73 | +1.50 .. +1.73 | +1.46 .. +1.80 | +43.0 | -10.1 | -18.5 | -20.4 | | | -0.44 [-0.80, -0.07] | -28.6 [-72.1, -7.6] |
+| `blend` | 50 | 5 | +1.60 | +1.40 | +1.56 | +1.55 | +1.31 .. +1.85 | +1.22 .. +1.91 | +1.47 .. +2.07 | +44.7 | -9.1 | -18.8 | -20.2 | | | -0.43 [-0.79, +0.01] | -26.9 [-74.4, -2.9] |
+| `blend` | 50 | 10 | +1.58 | +1.40 | +1.64 | +1.53 | +1.40 .. +1.83 | +1.23 .. +1.86 | +1.49 .. +1.87 | +43.4 | -9.5 | -18.9 | -20.0 | | | -0.44 [-0.84, -0.03] | -28.1 [-74.0, -6.0] |
+| `selh` | 30 | 5 | +0.71 | +0.60 | +0.80 | +0.95 | +0.12 .. +1.35 | -0.03 .. +1.18 | +0.71 .. +1.55 | +16.1 | -10.5 | -20.1 | -28.9 | 12.1 | 0.45 | -1.32 [-2.15, -0.38] | -55.4 [-136.7, -11.3] |
+| `selh` | 30 | 10 | +1.07 | +0.60 | +0.86 | +0.94 | +0.38 .. +1.07 | +0.42 .. +1.18 | +0.71 .. +1.24 | +25.7 | -10.6 | -17.0 | -21.5 | 6.2 | 0.41 | -0.96 [-1.70, -0.19] | -45.9 [-114.5, -8.8] |
+| `selh` | 50 | 5 | +0.84 | +0.36 | +0.71 | +0.74 | +0.13 .. +1.39 | -0.26 .. +1.49 | +0.82 .. +1.60 | +20.2 | -9.4 | -19.6 | -24.1 | 15.2 | 0.45 | -1.19 [-1.96, -0.28] | -51.3 [-131.4, -8.7] |
+| `selh` | 50 | 10 | +0.81 | +0.36 | +0.74 | +0.51 | +0.23 .. +1.29 | +0.08 .. +1.63 | +0.53 .. +1.18 | +18.1 | -10.5 | -17.5 | -23.9 | 11.5 | 0.41 | -1.22 [-2.09, -0.30] | -53.4 [-131.1, -12.6] |
+| `ls` (information) | 30 | 5 | -0.27 | -0.75 | +0.26 | +1.13 | | | | -14.6 | -23.8 | -29.9 | -42.6 | 58.6 | 1.01 | | |
+| `ls` | 30 | 10 | -0.22 | -0.06 | -0.18 | +0.41 | | | | -8.6 | -19.2 | -21.8 | -29.6 | 45.8 | 1.00 | | |
+| `ls` | 50 | 5 | -0.03 | -0.32 | +0.65 | +0.47 | | | | -8.2 | -30.8 | -45.3 | -53.0 | 68.2 | 1.01 | | |
+| `ls` | 50 | 10 | -0.12 | -1.15 | +0.32 | +0.13 | | | | -6.6 | -20.5 | -27.8 | -33.3 | 55.4 | 1.00 | | |
+
+\* post hoc: by the prereg form-2 placebos are run only for candidates that meet conditions (a), (c), (d); none did, so these 240
+arms were run afterwards for information and change no verdict. 7 bp and the 20 bp stress give the same picture (`sel` 30 / 5:
+1.03 / 0.91; `tsel` 30 / 5: 1.77 / 1.59 against the live book's 2.06 / 2.03; full tables in `agent/fsel/report_lead.md`).
+
+Pick rule: no candidate is eligible. (a) fails for all 16 (no form has a higher Sharpe than the live book at 7 or 10 bp; the
+closest is `tsel` 30 / 5 at -0.30 [-1.20, +0.71]); (b) fails for every `sel` / `selh` / `blend` candidate (each is inside its
+placebo ranges); (d) fails for all. **Registered null at the lead search. The confirmation segment 2025-05 .. 2026-10 was not
+opened.** Minimum detectable effect there, had a form been picked: 2.8 x lead SE x sqrt(28 / 18) = 1.3-1.6 Sharpe for `sel` /
+`selh` (SE 0.38-0.46), 1.6-2.1 for `tsel` (SE 0.45-0.60), 0.7 for `blend` (SE 0.19-0.21): 18 months could not have resolved any
+effect of plausible size, so the strongest possible confirmation verdict would have been "lean".
+
+Reading:
+- Long-only selection carries no usable edge. The forecast's weekly rank IC on the wide universe is real in sign (+0.10 / +0.08)
+  but it is not in the extremes: the top 5 or 10 names do not beat the universe (+10 bp a week, interval +-100) and the bottom ones
+  do not lag it, so the long-short book loses (-0.3 to 0.0 Sharpe) and the edge is on neither leg. 28-day momentum does better as an
+  information check on the short side (losers keep lagging: +94 bp a week on the top 30).
+- Most of the IC is a static asset effect, as in RERANK / HRK1: the circular-shift IC is 0.06 / 0.05 of 0.10 / 0.08, and the real
+  IC is inside the range of the 20 shifted draws. In the books the shifted forecast (right names in general, wrong week) does as
+  well as the real one: the real `sel` book beats 4-9 of 20 shift draws, against 14-19 of 20 shuffled and 10-14 of 20 random-K
+  draws. So the forecaster's standing preferences beat random names, its weekly timing adds nothing here. Caveat: a shift placebo
+  can only pick names that also have a forecast in the other week, a mild seasoning / survivorship help to the placebo.
+- `mkt+r168` beats `mkt+r24` as a selection rank in every form (for example `sel` 1.00 against 0.39, `tsel` 1.72 against 0.26) and
+  beats both momentum ranks in `sel` and `tsel`: the longer horizon is the better selector, it is just not good enough.
+- The trend book restricted to the forecast top 5 is the one form with a respectable level: Sharpe 1.72 / 1.53, CAGR 61 / 54 %,
+  worst month -4.4 / -7.6 %, against 1.0-1.1 with momentum and a median of 0.8-1.0 for random 5 names (post hoc: above all 40
+  shuffled and random draws at N 30, above 37 of 40 at N 50; 3 of 20 shift draws beat it at each N). It is still 0.3-0.5 below the
+  live book with an interval of +-1, on a window in which the live book's tilt was itself selected.
+- The 50 / 50 blend lowers the live book's Sharpe by 0.36-0.44: the selection sleeve is too weak and too correlated to diversify.
+- Capacity (form 1, N 50, K 10, 5,000 USDT equity): 14.7 orders a week, median 128 USDT, largest 633 USDT; 4 % of orders below
+  the 5.5 USDT minimum; order size at most 0.014 % of the name's 30-day median daily volume. Not a constraint.
+- Implication worth one registered check elsewhere: the M11 tilt's placebos so far were within-day shuffles, which also destroy
+  the static preference; a circular-shift placebo for `gt24` has not been run.
+Limits: one 28-month lead window, Binance bars, a reference whose tilt was fitted on the same window (which raises the bar the
+forms had to clear); the registered run was interrupted once by a host restart after the registered report was written, and only
+the post hoc placebo arms were resumed.

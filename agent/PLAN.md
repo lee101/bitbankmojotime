@@ -55,6 +55,16 @@ Numbers quoted here are in `bench/LEADERBOARD.md`; licences in `docs/SCOPE.md`.
   becomes neutral (+0.03) instead of harmful but stays 0.11 below `gt24`; a no-trade band does not help. `gt24` stays; no
   confirmation run, R25-R40 (seeded in the prereg) remain unbuilt.
 
+### Wave 6 outcome (2026-11-18, `agent/PREREG-FSEL.md`, research log wave 6)
+
+- Selection use of `mkt+r168` on the point-in-time top-30 / top-50 universe (UNIV construction), weekly, lead segment 2023-01 ..
+  2025-04: registered null, no form beats the live book (M11 trend + 24 h tilt at k 1.10, Sharpe 2.03 there). Weekly top-K books
+  0.8-1.0 Sharpe, inside their shuffled / random-K / circular-shift placebo ranges; long-short loses; blend -0.4. The trend book
+  restricted to the forecast top 5 reaches 1.5-1.7 (momentum 1.1, random 5 names 0.8-1.0) but stays below the live book. Weekly IC
+  +0.10 / +0.08, of which about 0.06 / 0.05 is a static asset effect (circular shift). Confirmation segment 2025-05 .. 2026-10 not
+  opened (it could not have resolved less than 0.7-2 Sharpe anyway).
+- Open check: a circular-shift placebo for the live `gt24` tilt (its placebos so far were within-day shuffles).
+
 ### Next, in order of expected value
 
 1. Forward scoring registered in `agent/PREREG-GATE.md` section 4: frozen F4 checkpoints, 2026-11-01 .. 2027-01-31, scored once in

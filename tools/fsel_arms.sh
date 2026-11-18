@@ -1,6 +1,6 @@
 #!/bin/bash
-# usage: fsel_arms.sh <lead|full> <list spec>   form-2 arms in 3 shards x 3 sim threads, then merge
-export FSEL_TH=3
+# usage: fsel_arms.sh <lead|full> <list spec>   form-2 arms in 3 shards x 2 sim threads (resumable: finished arms are skipped), then merge
+export FSEL_TH=2
 source /nvme0n1-disk/code/bitbankmojotime-hz-wt/tools/fsel_harness.sh
 for i in 0 1 2; do nice -n 10 python3 $HZ/tools/fsel_trend.py arms $1 "$2" $i/3 > arms_$1_$i.log 2>&1 & done; wait
 nice -n 10 python3 $HZ/tools/fsel_trend.py merge $1 > merge_$1.log 2>&1

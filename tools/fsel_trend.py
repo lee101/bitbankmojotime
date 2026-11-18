@@ -83,7 +83,7 @@ def run_one(bid, seg):
     if form == "tsel":
         if (N, seg, nm) not in _V: _V[(N, seg, nm)] = F.ranks(p, nm)
         H = F.held_daily(p, F.held_sets(p, _V[(N, seg, nm)], K)); E[p.k0:p.k1] = H[p.k0:p.k1] & memb[p.k0:p.k1]
-    aid = "f" + hashlib.md5(f"{bid}|{seg}".encode()).hexdigest()[:12]; d = f"{slib.D}/u/{aid}"; os.makedirs(d, exist_ok=True)
+    aid = "f" + hashlib.md5(f"{bid}|{seg}|{os.getpid()}".encode()).hexdigest()[:12]; d = f"{slib.D}/u/{aid}"; os.makedirs(d, exist_ok=True)
     try:
         for x in ("panel.bin", "L.f64", "grid.cells", "cols.json"):
             if not os.path.lexists(f"{d}/{x}"): os.symlink(f"{XD(N)}/{x}", f"{d}/{x}")
@@ -99,6 +99,12 @@ def run_one(bid, seg):
         cands.cleanup(Uo) if "Uo" in dir() else None
         uv._SIG.pop(aid, None); cv._FC.pop(aid, None); shutil.rmtree(d, ignore_errors=True)
     print("arm", bid, f"{time.time() - t0:.0f}s", flush=True)
+
+
+def quiet():
+    """no new arm inside the host's quiet window (FSEL_QUIET=HH:MM-HH:MM UTC, default 20:43-20:49)."""
+    lo, hi = os.environ.get("FSEL_QUIET", "20:43-20:49").split("-")
+    while lo <= time.strftime("%H:%M", time.gmtime()) < hi: time.sleep(10)
 
 
 def arm_list(seg, spec):
@@ -128,6 +134,7 @@ if __name__ == "__main__":
     elif cmd == "engine": engine(sys.argv[2])
     elif cmd == "merge": merge(sys.argv[2])
     else:
-        ids = arm_list(sys.argv[2], sys.argv[3]); i, n = (int(x) for x in sys.argv[4].split("/")) if len(sys.argv) > 4 else (0, 1)
-        for b in ids[i::n]: run_one(b, sys.argv[2])
+        ids = arm_list(sys.argv[2], sys.argv[3]); sh = sys.argv[4] if len(sys.argv) > 4 else "0/1"; i, n = (int(x) for x in sh.rstrip("r").split("/"))
+        for b in (ids[i::n][::-1] if sh.endswith("r") else ids[i::n]):
+            quiet(); run_one(b, sys.argv[2])
         print("FSEL_ARMS_DONE", sys.argv[3], i, n, flush=True)
