@@ -187,6 +187,7 @@ if __name__ == "__main__":
     ap.add_argument("--seeds", default="0,1")
     ap.add_argument("--coins", default="")
     ap.add_argument("--out", default="botpred.npz")
+    ap.add_argument("--end", default="", help="botpred: YYYY-MM-DD, extend the last fold's origins to this date (last fold's checkpoints)")
     a = ap.parse_args()
     arms, seeds = a.arms.split(","), [int(x) for x in a.seeds.split(",")]
     if a.cmd == "val":
@@ -257,6 +258,8 @@ if __name__ == "__main__":
         print("botpred coins", len(syms), "missing", [x for x in a.coins.split(",") if a.coins and x not in b.ix], flush=True)
         out = {}
         for fi, (fn, s_abs, e_abs) in enumerate(D.FOLDS):
+            if a.end and fi == len(D.FOLDS) - 1:
+                e_abs = max(e_abs, D.eh(*(int(x) for x in a.end.split("-"))))
             t = np.arange(s_abs, e_abs) - b.t0
             t = t[((t + b.t0) % 24 == 23) & (t < b.T)]
             A, TT = np.meshgrid([b.ix[x] for x in syms], t, indexing="ij")
