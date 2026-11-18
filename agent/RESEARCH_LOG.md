@@ -298,3 +298,175 @@ Forecasts from Kraken bars for 21/30 R9-R24 coins and 26/36 ALGOS coins, to 2026
 Verdict: does not survive (registered bar). The coverage-matched reference fails the same way and lower, so the cause is coverage
 (9 coins and October missing), not the Kraken training data, which carries the ranking information at the same IC.
 Outputs `runs-agent/lic/`.
+
+## Wave 4f: gearing of the confirmed tilt (`agent/PREREG-REGEAR.md`, 2026-11-18)
+
+Question: `gt` only scales rows down (gross 0.83 -> 0.74 on the Binance settings), so at what constant multiplier k of the producer's
+risk budget does it carry the risk of the untilted base, and what CAGR does that buy. k multiplies pv and cap (and the bear rows) before
+the tilt, as the producer would with `--pvt --cap --pvt-bear --cap-bear` x k; the tilt then acts on the k-scaled book, so its timing is
+kept (unlike `gtr`). Arms: `gt` at k 1.00 .. 1.30, pure gearing (base at k 0.85 .. 1.30, no tilt), both paired with base k 1. 30
+universes (14 lead + R9-R24) x 3,003 configurations, c7 / c10, 2023-01 .. 2026-10, plus the two live configurations on M11.
+`tools/r24regear.py`, outputs `runs-agent/regear/{regear,live,gross}.json`. A gearing calibration in sample on data already used to
+select and confirm `gt`: no placebo, no new significance claim.
+
+Identity (k = 1 reproduces the stored `gt` run bit-for-bit): `al.summarize` arrays and turnover equal to the wave 4c resume cache on
+16/16 universes at both costs; pooled statistics equal to `gate/gate_gt.json` (13 keys and its ruin row) and `confirm/gate_gt.json`
+(14 keys); the Binance-settings base re-simulated alone equals the stored base cell. Mean target gross on the Binance settings 0.830 ->
+0.739 at k 1, as the producer reports.
+
+Pooled, c7 (30 universes x 3,003 = 90,090 cells; level = median, (d) = median paired difference vs base k 1):
+
+| arm | CAGR (d) | mean d CAGR [95 %] | mean d Sharpe [95 %] | gross | vol ratio | worst month (d) | 21-day DD (d) | 60-day DD (d) | maxDD (d) | turnover | ruin P(DD>60 %) | CAGR up, worst month not up | rule: pooled / live |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| base k 1.00 | 27.1 | | | 0.694 | 1.000 | 10.6 | 15.8 | 19.4 | 25.9 | | 41.1 | | |
+| `gt` k 1.00 | 26.1 (-1.0) | -1.27 [-12.83, +4.67] | +0.143 [+0.029, +0.256] | 0.617 | 0.813 | 8.1 (-2.25) | 12.8 (-2.75) | 15.3 (-3.71) | 20.8 (-4.77) | -5.5 % | 24.3 | 40 % | pass / pass |
+| `gt` k 1.05 | 27.1 (-0.0) | -0.18 [-10.08, +4.91] | +0.140 [+0.028, +0.252] | 0.642 | 0.847 | 8.4 (-1.92) | 13.3 (-2.30) | 15.8 (-3.14) | 21.7 (-3.83) | -0.9 % | 28.7 | 45 % | pass / pass |
+| `gt` k 1.10 | 28.0 (+0.9) | +0.77 [-7.58, +5.23] | +0.135 [+0.028, +0.242] | 0.667 | 0.878 | 8.7 (-1.61) | 13.8 (-1.81) | 16.3 (-2.57) | 22.7 (-2.91) | +3.9 % | 33.0 | 49 % | pass / pass |
+| `gt` k 1.15 | 28.9 (+1.8) | +1.63 [-5.29, +5.59] | +0.128 [+0.022, +0.233] | 0.691 | 0.910 | 9.0 (-1.32) | 14.2 (-1.37) | 16.9 (-2.03) | 23.7 (-2.01) | +8.8 % | 36.6 | 51 % | pass / fail |
+| `gt` k 1.20 | 29.8 (+2.7) | +2.53 [-3.40, +6.31] | +0.124 [+0.019, +0.230] | 0.713 | 0.941 | 9.3 (-1.04) | 14.7 (-0.92) | 17.4 (-1.54) | 24.6 (-1.14) | +13.4 % | 39.4 | 52 % | pass / fail |
+| `gt` k 1.25 | 30.5 (+3.5) | +3.35 [-1.99, +7.47] | +0.119 [+0.016, +0.225] | 0.734 | 0.971 | 9.5 (-0.77) | 15.1 (-0.47) | 18.0 (-0.99) | 25.5 (-0.28) | +17.8 % | 43.1 | 50 % | pass / fail |
+| `gt` k 1.30 | 31.3 (+4.3) | +4.11 [-0.42, +8.84] | +0.113 [+0.009, +0.221] | 0.755 | 1.000 | 9.8 (-0.52) | 15.6 (-0.02) | 18.5 (-0.48) | 26.4 (+0.53) | +22.6 % | 45.0 | 48 % | pass / fail |
+| base k 0.85 | 24.0 (-3.1) | -3.23 [-10.67, +0.75] | +0.013 [-0.012, +0.038] | 0.603 | 0.868 | 9.4 (-1.13) | 14.0 (-1.70) | 17.3 (-1.96) | 22.7 (-3.24) | -16.4 % | 28.3 | 13 % |  |
+| base k 0.90 | 25.2 (-2.0) | -2.08 [-6.98, +0.53] | +0.009 [-0.007, +0.025] | 0.634 | 0.914 | 9.8 (-0.73) | 14.7 (-1.10) | 18.0 (-1.26) | 23.8 (-2.12) | -10.9 % | 32.5 | 17 % |  |
+| base k 0.95 | 26.2 (-1.0) | -1.02 [-3.48, +0.26] | +0.004 [-0.004, +0.012] | 0.664 | 0.958 | 10.2 (-0.35) | 15.3 (-0.53) | 18.7 (-0.60) | 24.9 (-1.04) | -5.3 % | 37.1 | 22 % |  |
+| base k 1.05 | 28.1 (+1.0) | +1.02 [-0.23, +3.53] | -0.003 [-0.011, +0.005] | 0.722 | 1.040 | 10.9 (+0.35) | 16.4 (+0.51) | 20.0 (+0.58) | 26.9 (+1.01) | +5.1 % | 45.4 | 17 % |  |
+| base k 1.10 | 28.9 (+1.8) | +1.96 [-0.52, +6.89] | -0.006 [-0.022, +0.009] | 0.749 | 1.080 | 11.3 (+0.71) | 16.9 (+1.03) | 20.5 (+1.16) | 27.9 (+2.00) | +10.3 % | 49.1 | 15 % |  |
+| base k 1.15 | 29.8 (+2.7) | +2.87 [-0.76, +10.22] | -0.009 [-0.032, +0.013] | 0.775 | 1.119 | 11.7 (+1.04) | 17.4 (+1.54) | 21.1 (+1.74) | 28.9 (+2.96) | +15.5 % | 53.6 | 13 % |  |
+| base k 1.20 | 30.5 (+3.5) | +3.70 [-1.06, +13.41] | -0.013 [-0.042, +0.017] | 0.799 | 1.157 | 12.0 (+1.37) | 17.9 (+2.04) | 21.6 (+2.28) | 29.9 (+3.91) | +20.4 % | 56.8 | 11 % |  |
+| base k 1.25 | 31.3 (+4.2) | +4.50 [-1.30, +16.51] | -0.016 [-0.052, +0.021] | 0.822 | 1.193 | 12.3 (+1.69) | 18.4 (+2.52) | 22.2 (+2.81) | 30.9 (+4.80) | +25.2 % | 58.8 | 9 % |  |
+| base k 1.30 | 32.0 (+5.0) | +5.25 [-1.55, +19.36] | -0.019 [-0.062, +0.024] | 0.844 | 1.227 | 12.6 (+1.97) | 18.9 (+3.00) | 22.7 (+3.30) | 31.8 (+5.65) | +29.9 % | 61.7 | 8 % |  |
+
+Pooled, c10 (30 universes x 3,003 = 90,090 cells; level = median, (d) = median paired difference vs base k 1):
+
+| arm | CAGR (d) | mean d CAGR [95 %] | mean d Sharpe [95 %] | gross | vol ratio | worst month (d) | 21-day DD (d) | 60-day DD (d) | maxDD (d) | turnover | ruin P(DD>60 %) | CAGR up, worst month not up | rule: pooled / live |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| base k 1.00 | 26.1 | | | 0.694 | 1.000 | 10.6 | 15.9 | 19.5 | 26.4 | | 41.2 | | |
+| `gt` k 1.00 | 25.1 (-0.9) | -1.16 [-12.60, +4.73] | +0.139 [+0.025, +0.253] | 0.617 | 0.813 | 8.2 (-2.26) | 12.8 (-2.75) | 15.4 (-3.72) | 21.2 (-4.82) | -5.5 % | 24.6 | 40 % | pass / pass |
+| `gt` k 1.05 | 26.1 (+0.0) | -0.13 [-9.92, +4.93] | +0.137 [+0.024, +0.249] | 0.642 | 0.846 | 8.5 (-1.92) | 13.4 (-2.30) | 16.0 (-3.14) | 22.1 (-3.87) | -0.9 % | 28.9 | 45 % | pass / pass |
+| `gt` k 1.10 | 27.0 (+0.9) | +0.77 [-7.51, +5.20] | +0.131 [+0.024, +0.238] | 0.667 | 0.878 | 8.8 (-1.61) | 13.8 (-1.81) | 16.5 (-2.57) | 23.1 (-2.93) | +3.9 % | 32.6 | 49 % | pass / pass |
+| `gt` k 1.15 | 27.7 (+1.7) | +1.57 [-5.31, +5.51] | +0.124 [+0.018, +0.229] | 0.691 | 0.910 | 9.1 (-1.31) | 14.3 (-1.37) | 17.0 (-2.02) | 24.1 (-2.00) | +8.8 % | 36.9 | 51 % | pass / fail |
+| `gt` k 1.20 | 28.7 (+2.5) | +2.42 [-3.51, +6.15] | +0.120 [+0.015, +0.227] | 0.713 | 0.941 | 9.4 (-1.03) | 14.8 (-0.92) | 17.6 (-1.52) | 25.1 (-1.11) | +13.4 % | 39.8 | 51 % | pass / fail |
+| `gt` k 1.25 | 29.3 (+3.3) | +3.18 [-2.13, +7.24] | +0.114 [+0.011, +0.221] | 0.734 | 0.971 | 9.6 (-0.76) | 15.2 (-0.46) | 18.1 (-0.97) | 26.0 (-0.24) | +17.9 % | 43.4 | 49 % | pass / fail |
+| `gt` k 1.30 | 30.0 (+4.0) | +3.89 [-0.61, +8.55] | +0.108 [+0.005, +0.217] | 0.755 | 1.000 | 9.9 (-0.50) | 15.7 (-0.01) | 18.7 (-0.46) | 26.9 (+0.58) | +22.6 % | 45.1 | 47 % | pass / fail |
+| base k 1.10 | 27.8 (+1.7) | +1.84 [-0.58, +6.66] | -0.007 [-0.022, +0.009] | 0.749 | 1.080 | 11.4 (+0.72) | 16.9 (+1.04) | 20.7 (+1.18) | 28.4 (+2.03) | +10.3 % | 49.5 | 15 % |  |
+| base k 1.30 | 30.6 (+4.6) | +4.91 [-1.75, +18.75] | -0.021 [-0.064, +0.023] | 0.844 | 1.227 | 12.7 (+1.99) | 19.0 (+3.01) | 22.8 (+3.33) | 32.3 (+5.75) | +30.0 % | 62.7 | 8 % |  |
+
+Pick (registered rule: largest grid k, contiguous from 1.00, at which the pooled median paired worst-month and 60-day drawdown are
+both <= 0 and both live configurations have worst month and 60-day drawdown not above their base, at c7 and c10): **k* = 1.10**.
+- Pooled alone passes on the whole grid (k 1.30: worst month -0.5, 60-day DD -0.5; nothing is extrapolated beyond it). Volatility
+  matches base at k 1.30 (ratio 1.000). Not in the rule: median maxDD passes base between 1.25 and 1.30, and the M11 ruin view
+  P(DD > 60 %) between 1.20 and 1.25 (39.4 -> 43.1 against 41.1).
+- The Binance settings pass on the whole grid. The binding constraint is the KuCoin settings: worst month +0.18 points above its
+  base at k 1.15 (10.8 against 10.6 %), 60-day DD above it from 1.20 (+0.8 to +1.3). One path; KuCoin runs the lower budget (pv .20)
+  with a 10.6 % worst month in this window, so there is little room. Its k 1.25 target book is the Binance k 1.00 one (cooldown 96 / 72 h).
+- The owner's 30 % worst-month limit is nowhere near binding in this window (`gt` live rows 6.8 - 11.4 % at every k); 2020-22 is not in
+  it (no forecast), where the untilted Binance settings had 23.1 % (FRONTIER).
+
+What k* = 1.10 buys (pooled, c7 / c10): median d CAGR +0.9 / +0.9 against -1.0 / -0.9 at k 1 (mean +0.77 [-7.58, +5.23]; the interval
+includes zero at every k), d Sharpe +0.135 [+0.028, +0.242] / +0.131 [+0.024, +0.238], volatility 0.88 x base, worst month -1.6, 21-day
+DD -1.8, 60-day DD -2.6, maxDD -2.9, ruin 41.1 -> 33.0 %, turnover +3.9 % (pure gearing at the same k: +10.3 %), 19/30 universes with
+higher median CAGR (12/30 at k 1), 49 % of cells with higher CAGR at not-higher worst month. Lead and R9-R24 agree (d CAGR +0.91 / +0.97,
+worst month -1.76 / -1.51). So k* gives back the tilt's CAGR cost and a little more while keeping about two thirds of its drawdown and
+volatility reduction (half of it on the ruin view).
+
+Tilt against pure gearing:
+- Same gearing, no tilt (base k 1.10): d CAGR +1.8 but Sharpe -0.007, worst month +0.7, 60-day DD +1.2, maxDD +2.0, ruin 49.1 %.
+- At equal risk the tilt is worth about +4 to +5.5 CAGR points, flat in k: +5.2 .. +5.7 at equal worst month and +4.7 .. +5.1 at equal
+  60-day DD (k 1.20 - 1.30, where the match lies inside the control grid), +3.5 .. +3.8 at equal maxDD and +3.7 .. +4.3 at equal volatility
+  (k 1.10 - 1.30). At k* itself the worst-month and 60-day matches lie below the control grid: `gt` k 1.10 has lower drawdowns than base
+  k 0.85 (worst month -1.61 against -1.13, 60-day -2.57 against -1.96) with +0.9 against -3.1 CAGR, i.e. at least +4.0.
+- Against `gtr` (+0.065, not separated): at the volatility-matched k 1.30 the constant multiplier keeps d Sharpe +0.113 [+0.009, +0.221]
+  and d CAGR +4.3 (mean +4.11 [-0.42, +8.84]).
+
+Live configuration, binance settings [0.25, 1.875, 0.06, 72, 0.05, 2, 10] on M11, c7:
+
+| arm | CAGR (d) [95 %] | Sharpe (d) [95 %] | gross | vol | worst month (d) | 21-day DD | 60-day DD (d) | maxDD | turnover | equity x | ruin worst S1-S5 / S0 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| base k 1.00 | 53.3 | 1.49 | 0.830 | 32.0 | 17.9 | 17.3 | 28.0 | 28.0 | | 5.21 | 43.7 / 0.1 |
+| `gt` k 1.00 | 51.8 (-1.5) [-25.1, +11.8] | 1.69 (+0.19) [-0.04, +0.47] | 0.739 | 26.9 | 8.8 (-9.07) | 13.1 | 18.3 (-9.68) | 18.3 | -3.4 % | 5.02 | 28.2 / 0.0 |
+| `gt` k 1.05 | 52.3 (-0.9) [-23.4, +12.2] | 1.61 (+0.12) [-0.13, +0.41] | 0.774 | 28.6 | 11.0 (-6.91) | 14.0 | 18.7 (-9.21) | 18.7 | +3.4 % | 5.09 | 32.2 / 0.0 |
+| `gt` k 1.10 | 56.0 (+2.7) [-15.6, +15.4] | 1.65 (+0.16) [-0.09, +0.44] | 0.799 | 29.6 | 10.0 (-7.88) | 13.7 | 18.6 (-9.33) | 18.6 | +8.1 % | 5.57 | 35.8 / 0.0 |
+| `gt` k 1.15 | 56.6 (+3.3) [-14.3, +16.9] | 1.62 (+0.13) [-0.15, +0.44] | 0.826 | 30.6 | 8.8 (-9.08) | 14.7 | 18.4 (-9.51) | 18.7 | +13.8 % | 5.65 | 39.6 / 0.0 |
+| `gt` k 1.20 | 58.5 (+5.2) [-9.8, +18.1] | 1.57 (+0.08) [-0.18, +0.37] | 0.863 | 32.7 | 9.8 (-8.12) | 16.0 | 18.4 (-9.54) | 19.8 | +20.9 % | 5.92 | 43.4 / 0.0 |
+| `gt` k 1.25 | 58.2 (+5.0) [-11.1, +20.1] | 1.56 (+0.07) [-0.21, +0.41] | 0.886 | 32.8 | 8.3 (-9.62) | 14.0 | 19.9 (-8.04) | 21.2 | +25.8 % | 5.89 | 44.1 / 0.0 |
+| `gt` k 1.30 | 60.9 (+7.6) [-6.9, +23.7] | 1.55 (+0.06) [-0.22, +0.37] | 0.916 | 34.4 | 10.5 (-7.37) | 16.3 | 22.4 (-5.53) | 24.1 | +32.2 % | 6.27 | 48.6 / 0.1 |
+| base k 0.85 | 45.1 (-8.1) [-27.9, +3.6] | 1.49 (-0.00) [-0.16, +0.17] | 0.715 | 27.6 | 10.8 (-7.14) | 14.6 | 19.3 (-8.64) | 19.3 | -16.7 % | 4.22 | 29.6 / 0.0 |
+| base k 1.10 | 58.5 (+5.3) [-1.4, +17.5] | 1.50 (+0.01) [-0.10, +0.12] | 0.900 | 34.8 | 16.7 (-1.24) | 16.2 | 24.5 (-3.46) | 24.5 | +11.0 % | 5.93 | 50.5 / 0.1 |
+| base k 1.30 | 63.4 (+10.1) [-3.5, +37.7] | 1.43 (-0.06) [-0.24, +0.12] | 1.029 | 39.9 | 16.1 (-1.82) | 21.6 | 24.9 (-3.06) | 25.8 | +34.5 % | 6.67 | 62.4 / 0.4 |
+
+Live configuration, binance settings [0.25, 1.875, 0.06, 72, 0.05, 2, 10] on M11, c10:
+
+| arm | CAGR (d) [95 %] | Sharpe (d) [95 %] | gross | vol | worst month (d) | 21-day DD | 60-day DD (d) | maxDD | turnover | equity x | ruin worst S1-S5 / S0 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| base k 1.00 | 52.7 | 1.48 | 0.830 | 32.1 | 18.0 | 17.3 | 27.8 | 27.8 | | 5.13 | 43.7 / 0.1 |
+| `gt` k 1.00 | 50.7 (-2.0) [-25.7, +11.3] | 1.66 (+0.18) [-0.06, +0.46] | 0.739 | 26.9 | 8.9 (-9.06) | 13.1 | 18.4 (-9.35) | 18.4 | -3.5 % | 4.87 | 28.4 / 0.0 |
+| `gt` k 1.05 | 51.2 (-1.5) [-24.0, +11.8] | 1.59 (+0.11) [-0.14, +0.40] | 0.774 | 28.6 | 11.1 (-6.90) | 14.1 | 18.9 (-8.89) | 18.9 | +3.4 % | 4.94 | 32.2 / 0.0 |
+| `gt` k 1.10 | 54.5 (+1.8) [-17.0, +14.6] | 1.62 (+0.14) [-0.11, +0.43] | 0.799 | 29.6 | 10.1 (-7.87) | 13.8 | 18.8 (-9.01) | 18.8 | +8.1 % | 5.37 | 35.9 / 0.0 |
+| `gt` k 1.15 | 55.2 (+2.5) [-15.4, +16.2] | 1.59 (+0.11) [-0.16, +0.43] | 0.826 | 30.6 | 8.9 (-9.11) | 14.7 | 18.6 (-9.20) | 18.9 | +13.8 % | 5.46 | 39.6 / 0.0 |
+| `gt` k 1.20 | 57.0 (+4.3) [-10.4, +16.9] | 1.54 (+0.06) [-0.19, +0.35] | 0.863 | 32.7 | 9.9 (-8.12) | 16.1 | 18.6 (-9.22) | 19.9 | +21.0 % | 5.71 | 43.4 / 0.0 |
+| `gt` k 1.25 | 56.8 (+4.0) [-12.1, +19.1] | 1.53 (+0.06) [-0.22, +0.40] | 0.886 | 32.8 | 8.4 (-9.62) | 14.1 | 20.1 (-7.72) | 21.4 | +25.9 % | 5.68 | 44.1 / 0.0 |
+| `gt` k 1.30 | 59.1 (+6.4) [-8.2, +22.2] | 1.52 (+0.04) [-0.23, +0.35] | 0.916 | 34.3 | 10.6 (-7.36) | 16.4 | 22.6 (-5.21) | 24.3 | +32.3 % | 6.01 | 48.8 / 0.1 |
+
+Live configuration, kucoin settings [0.2, 1.5, 0.06, 96, 0.05, 2, 10] on M11, c7:
+
+| arm | CAGR (d) [95 %] | Sharpe (d) [95 %] | gross | vol | worst month (d) | 21-day DD | 60-day DD (d) | maxDD | turnover | equity x | ruin worst S1-S5 / S0 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| base k 1.00 | 45.4 | 1.57 | 0.676 | 25.9 | 10.6 | 14.1 | 17.3 | 17.3 | | 4.24 | 24.9 / 0.0 |
+| `gt` k 1.00 | 35.6 (-9.8) [-36.6, +4.6] | 1.60 (+0.02) [-0.30, +0.35] | 0.587 | 20.3 | 6.8 (-3.77) | 11.9 | 13.7 (-3.63) | 14.8 | -5.0 % | 3.24 | 8.2 / 0.0 |
+| `gt` k 1.05 | 34.7 (-10.7) [-35.8, +2.7] | 1.50 (-0.08) [-0.41, +0.24] | 0.614 | 21.4 | 7.5 (-3.13) | 10.8 | 12.9 (-4.36) | 14.1 | +2.6 % | 3.16 | 11.2 / 0.0 |
+| `gt` k 1.10 | 38.7 (-6.7) [-21.5, +3.1] | 1.55 (-0.02) [-0.28, +0.23] | 0.651 | 22.7 | 8.0 (-2.59) | 11.7 | 15.6 (-1.70) | 15.6 | +9.0 % | 3.54 | 16.9 / 0.0 |
+| `gt` k 1.15 | 44.7 (-0.6) [-11.0, +7.6] | 1.64 (+0.07) [-0.16, +0.30] | 0.678 | 24.4 | 10.8 (+0.18) | 12.3 | 17.0 (-0.25) | 17.0 | +16.3 % | 4.17 | 21.3 / 0.0 |
+| `gt` k 1.20 | 45.8 (+0.4) [-10.0, +9.6] | 1.62 (+0.04) [-0.22, +0.30] | 0.704 | 25.3 | 11.4 (+0.75) | 12.7 | 18.4 (+1.14) | 19.0 | +21.5 % | 4.29 | 23.9 / 0.0 |
+| `gt` k 1.25 | 49.0 (+3.6) [-7.4, +14.1] | 1.63 (+0.06) [-0.21, +0.32] | 0.739 | 26.5 | 8.9 (-1.71) | 13.3 | 18.5 (+1.26) | 18.5 | +28.4 % | 4.66 | 27.6 / 0.0 |
+| `gt` k 1.30 | 54.8 (+9.4) [-1.8, +22.7] | 1.70 (+0.13) [-0.13, +0.40] | 0.768 | 27.9 | 9.8 (-0.77) | 13.2 | 18.1 (+0.83) | 18.1 | +33.9 % | 5.41 | 31.3 / 0.0 |
+| base k 0.85 | 37.6 (-7.8) [-20.1, -0.4] | 1.50 (-0.07) [-0.20, +0.08] | 0.579 | 22.9 | 10.4 (-0.20) | 13.2 | 17.8 (+0.57) | 17.8 | -16.7 % | 3.43 | 16.1 / 0.0 |
+| base k 1.10 | 48.0 (+2.7) [-2.0, +9.9] | 1.52 (-0.05) [-0.15, +0.04] | 0.739 | 28.5 | 11.6 (+1.03) | 13.8 | 20.2 (+2.91) | 20.2 | +13.5 % | 4.55 | 32.0 / 0.0 |
+| base k 1.30 | 58.2 (+12.8) [-1.7, +39.6] | 1.55 (-0.02) [-0.19, +0.15] | 0.858 | 33.0 | 17.6 (+6.98) | 15.4 | 24.5 (+7.26) | 24.5 | +37.2 % | 5.88 | 45.9 / 0.1 |
+
+Live configuration, kucoin settings [0.2, 1.5, 0.06, 96, 0.05, 2, 10] on M11, c10:
+
+| arm | CAGR (d) [95 %] | Sharpe (d) [95 %] | gross | vol | worst month (d) | 21-day DD | 60-day DD (d) | maxDD | turnover | equity x | ruin worst S1-S5 / S0 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| base k 1.00 | 44.3 | 1.55 | 0.676 | 25.8 | 10.7 | 14.1 | 17.4 | 17.4 | | 4.12 | 24.9 / 0.0 |
+| `gt` k 1.00 | 34.9 (-9.4) [-35.7, +4.8] | 1.57 (+0.02) [-0.31, +0.36] | 0.587 | 20.3 | 6.9 (-3.78) | 11.9 | 13.8 (-3.61) | 15.0 | -4.9 % | 3.17 | 8.3 / 0.0 |
+| `gt` k 1.05 | 33.9 (-10.4) [-34.8, +2.9] | 1.47 (-0.08) [-0.42, +0.23] | 0.614 | 21.4 | 7.5 (-3.13) | 10.8 | 13.1 (-4.34) | 14.3 | +2.7 % | 3.09 | 11.2 / 0.0 |
+| `gt` k 1.10 | 37.8 (-6.5) [-21.0, +3.0] | 1.53 (-0.02) [-0.28, +0.22] | 0.651 | 22.7 | 8.1 (-2.58) | 11.8 | 15.7 (-1.68) | 15.7 | +9.0 % | 3.45 | 16.8 / 0.0 |
+| `gt` k 1.15 | 43.6 (-0.6) [-11.2, +7.7] | 1.61 (+0.06) [-0.17, +0.29] | 0.678 | 24.4 | 10.9 (+0.19) | 12.4 | 17.2 (-0.21) | 17.2 | +16.5 % | 4.05 | 21.4 / 0.0 |
+| `gt` k 1.20 | 44.9 (+0.6) [-9.9, +9.9] | 1.59 (+0.04) [-0.21, +0.30] | 0.704 | 25.3 | 11.4 (+0.76) | 12.7 | 18.6 (+1.17) | 19.2 | +21.7 % | 4.19 | 24.0 / 0.0 |
+| `gt` k 1.25 | 48.0 (+3.7) [-7.2, +14.4] | 1.61 (+0.06) [-0.21, +0.32] | 0.739 | 26.5 | 9.0 (-1.69) | 13.4 | 18.7 (+1.29) | 18.7 | +28.5 % | 4.55 | 27.7 / 0.0 |
+| `gt` k 1.30 | 52.4 (+8.2) [-3.1, +20.8] | 1.65 (+0.10) [-0.17, +0.38] | 0.768 | 27.9 | 9.9 (-0.75) | 13.3 | 18.3 (+0.86) | 18.3 | +34.1 % | 5.10 | 31.1 / 0.0 |
+
+Tilt minus pure gearing at equal risk, pooled (CAGR points; k' = pure-gearing k with the same median risk measure; c7 / c10):
+
+| `gt` k | equal worst month: k', tilt - gear | equal 60-day DD | equal maxDD | equal vol | same k: d CAGR, d Sharpe, d worst month, d 60-day DD |
+|---|---|---|---|---|---|
+| 1.00 | below the control grid (k' < 0.85) | below the control grid (k' < 0.85) | below the control grid (k' < 0.85) | below the control grid (k' < 0.85) | -1.0, +0.147, -2.4, -4.1 |
+| 1.05 | below the control grid (k' < 0.85) | below the control grid (k' < 0.85) | below the control grid (k' < 0.85) | below the control grid (k' < 0.85) | -1.0, +0.148, -2.5, -4.1 |
+| 1.10 | below the control grid (k' < 0.85) | below the control grid (k' < 0.85) | 0.86, +3.7 / 0.87, +3.5 | 0.86, +3.9 / 0.86, +3.7 | -0.9, +0.144, -2.6, -4.2 |
+| 1.15 | below the control grid (k' < 0.85) | below the control grid (k' < 0.85) | 0.90, +3.7 / 0.91, +3.5 | 0.89, +3.9 / 0.89, +3.7 | -0.9, +0.141, -2.7, -4.2 |
+| 1.20 | 0.86, +5.5 / 0.86, +5.2 | 0.88, +5.1 / 0.88, +4.8 | 0.95, +3.7 / 0.95, +3.5 | 0.93, +4.1 / 0.93, +3.8 | -0.7, +0.141, -2.7, -4.2 |
+| 1.25 | 0.90, +5.6 / 0.90, +5.2 | 0.92, +5.1 / 0.92, +4.8 | 0.99, +3.7 / 0.99, +3.5 | 0.97, +4.2 / 0.97, +4.0 | -0.8, +0.139, -2.8, -4.2 |
+| 1.30 | 0.93, +5.7 / 0.93, +5.3 | 0.96, +5.0 / 0.96, +4.7 | 1.03, +3.8 / 1.03, +3.5 | 1.00, +4.3 / 1.00, +4.0 | -0.7, +0.137, -2.8, -4.2 |
+
+Production statement for k* = 1.10 (no deploy done; with the tilt on, never without it):
+- Binance, job `binancegomojo/live_trader` env (the `stopwatch` job carries copies of the same four): `BGM_TREND_PVT` 0.25 -> 0.275,
+  `BGM_TREND_CAP` 1.875 -> 2.0625, `BGM_TREND_PVT_BEAR` 0.1875 -> 0.20625, `BGM_TREND_CAP_BEAR` 1.5625 -> 1.71875; then re-run
+  `deploy/staged/fcast-tilt/jobs.py on-binance`, because `BGM_TREND_PRODUCER` embeds `--pvt --cap --pvt-bear --cap-bear` (and the
+  `--config` label) from that env and a stale copy would keep k = 1.
+- KuCoin, job `bitbankkucoinmojo/trend_producer` argv: `--pvt` 0.20 -> 0.22, `--cap` 1.5 -> 1.65, `--pvt-bear` 0.15 -> 0.165,
+  `--cap-bear` 1.25 -> 1.375 (label `--config trend_m11_sel10_pv0.22_g1.65_cov1`).
+- Feasibility, Binance: live-exec's default `--min-margin-level 2.0` (the trader script does not pass one) stops increases at gross
+  2.0. At k 1.10 the cap is 2.0625: the tilted target row is above 2.0 on 17 of 1,411 window days (32 over the whole history) by at
+  most 0.06 of equity, so those days are under-filled by <= 3 % of the book; no block. Exact tracking needs the floor at 1.94 (a script
+  change). k <= 1.066 needs nothing; k 1.30 (cap 2.44, margin level 1.70, 79 days above 2.0) needs the floor lowered (live-check
+  blocks below 1.5). Borrow is needed on 30 % of days as today (430 against 452); USDT borrow has been available (4.6 - 5.7 %/yr logged,
+  10 % modelled) but an empty pool (-3045) leaves the book at gross <= 1, the safe side.
+- Feasibility, KuCoin: bkm clips gross at `-lev 3`, blocks new exposure above debt ratio 0.6 (gross 2.5) and accepts file weights in
+  [0, 3]; the producer cap is 1.65 at k 1.10 and 1.95 at k 1.30. No change needed at any grid k.
+- Fallback risk: with k > 1 a run that falls back to plain targets (malformed file, model mismatch, no cached copy) trades base k 1.10,
+  the pure-gearing arm (worst month +0.7, ruin 41 -> 49 %), until the file is good again.
+
+Caveats: in-sample calibration over 46 months; the two live rows are single paths (the tilt's CAGR cost at k 1 is -1.5 points on the
+Binance settings and -9.8 on the KuCoin settings, against a pooled median of -1.0; at k 1.10 the KuCoin row is still 6.7 below its
+base, interval [-21.5, +3.1], and reaches base CAGR near 1.15 - 1.20). Turnover is the sim total (the gearing changes the whole
+simulated history). The forward check is the February 2027 scoring.

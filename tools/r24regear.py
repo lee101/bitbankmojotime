@@ -92,8 +92,9 @@ def run(us):
             if c not in b0:
                 E0 = base_E(u, c); m0, R0 = metrics(E0, cal); S, Q, L, npm = msums(R0, cal); b0[c] = (E0, m0, boot_parts(S, Q, L, npm, cnt), base_T(u, c))
             return b0[c]
-        for kind, ks in (("gt", KS), ("b", KB)):
-            for k in ks:
+        order = [(kind, k) for kind, ks in (("gt", KS), ("b", KB)) for k in ks]
+        for kind, k in (order[::-1] if os.environ.get("REGEAR_REV") else order):   # REGEAR_REV: a helper process working from the other end
+            if True:
                 a = aid(kind, k)
                 if os.environ.get("REGEAR_SMOKE") and k != 1.0: continue
                 if all(os.path.exists(cellf(u, c, a)) for c in al.COSTS): continue
@@ -143,6 +144,23 @@ def live():
             out[f"{nm}|{c}"] = dict(cfg=list(cf[i]), base_identical_to_stored=ok if i == 0 else None, arms=rows)
         print("live", c, "stored base identical:", ok, flush=True)
     os.makedirs(OUT, exist_ok=True); json.dump(out, open(f"{OUT}/live.json", "w"), indent=1)
+
+
+def gross_view():
+    """descriptive (feasibility): row gross of the target book of the two live configurations per arm: mean, max, days above 1 (borrow) and above 2
+    (the Binance executor's default --min-margin-level 2.0 blocks increases there), on the evaluation window and on the whole history."""
+    Uo = RB.restrict(slib.U("M11")); z = np.load(fc_file("M11")); nx = np.array([s not in slib.NOX for s in Uo.sy]); Fr = G.frac(RB.fmat(Uo, z, "mkt+r24"), nx)
+    arms = {"gt": gt_arm(Uo, Fr), "b": cv.Arm("base")}; out = {}
+    for nm, c in (("binance", slib.LIVE), ("kucoin", KUC)):
+        for kind, ks in (("b", KB), ("gt", KS)):
+            wf = cv.make_wfun(Uo, arms[kind])
+            for k in ks:
+                g = np.abs(wf(kc(c, k))).sum(1); r = {}
+                for lab, x in (("win", g[Uo.k0:]), ("all", g)):
+                    r[lab] = dict(mean=float(x.mean()), p99=float(np.percentile(x, 99)), max=float(x.max()), days=int(len(x)), gt1=int((x > 1.0 + 1e-9).sum()), gt2=int((x > 2.0 + 1e-9).sum()), gt25=int((x > 2.5 + 1e-9).sum()))
+                out[f"{nm}|{aid(kind, k)}"] = r
+    json.dump(out, open(f"{OUT}/gross.json", "w"), indent=1)
+    for k_, v in out.items(): print(k_, {q: (round(x, 3) if isinstance(x, float) else x) for q, x in v["win"].items()}, "| all max", round(v["all"]["max"], 3), "gt2", v["all"]["gt2"])
 
 
 # ---------------------------------------------------------------- analysis
@@ -261,4 +279,5 @@ if __name__ == "__main__":
     cmd = sys.argv[1]; os.makedirs(OUT, exist_ok=True)
     if cmd == "run": run(sys.argv[2].split(",") if len(sys.argv) > 2 else (CONF if os.environ.get("GATE_UNIS") == "CONF" else LEAD))
     elif cmd == "live": live()
+    elif cmd == "gross": gross_view()
     else: ana()
