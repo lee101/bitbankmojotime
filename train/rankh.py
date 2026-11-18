@@ -2,6 +2,8 @@
 
   python -m train.rankh train --hs 72,168 --seeds 0,1     fold checkpoints + validation predictions -> $BMT_HZ_OUT
   python -m train.rankh pred  --hs 72,168                  scores of mkt+r24 (frozen) and the long models on the row sets V, T, B
+  python -m train.rankh wide                               PREREG-FSEL: daily 00:00 forecasts of mkt+r24 / mkt+r168 for the wide universe
+                                                           (BMT_DATA = the merged cache of tools/fsel_cache.py) + the truncation test
 """
 import argparse, json, math, os, sys, time
 import numpy as np, torch
@@ -145,6 +147,65 @@ class RH(R24):
         return s.predict(model, a, t, 1, fold=fi)[:, slots, 10].cpu().numpy()
 
 
+class Wide(RH):
+    """prediction only: a feature bank over the pool plus extra symbols; the market series still come from the training pool."""
+    def __init__(s, dev, syms, vram_gb=3.2):
+        from bmtbench.gpu import wait_for_gpu, cap_torch
+        from train.bank import Bank
+        wait_for_gpu(3500); cap_torch(vram_gb)
+        s.dev, s.bank = dev, Bank(syms, D.universe()["train"], dev)
+
+
+def wide(seeds):
+    out_dir = os.environ["BMT_FSEL_OUT"]
+    meta = json.load(open(os.path.join(D.CACHE, "names.json")))
+    u = D.universe()
+    R = Wide("cuda", u["pool"] + [x for x in meta["new"] if x not in u["pool"]]); b = R.bank
+    assert b.t0 + b.T - 1 == meta["tmax"], (b.t0, b.T, meta["tmax"])
+    ids = np.array([b.ix[x] for x in meta["syms"]])
+    models = [("mkt+r24", sd, (lambda fn, sd=sd: os.path.join(R24CK, f"mkt+r24_s{sd}_{fn}.pt")), H24) for sd in seeds] + \
+             [("mkt+r168", sd, (lambda fn, sd=sd: ckpt(168, sd, fn)), len(S.HZ)) for sd in seeds]
+    A, TT, FF = [], [], []
+    for fi, (fn, s_abs, e_abs) in enumerate(D.FOLDS):
+        t = np.arange(s_abs, e_abs) - b.t0
+        t = t[((t + b.t0) % 24 == 23) & (t < b.T)]
+        Ai, Ti = np.meshgrid(ids, t, indexing="ij"); Ai, Ti = Ai.ravel(), Ti.ravel()
+        ok = (Ti - b.first[Ai] >= 600) & (Ti <= b.last[Ai]); Ai, Ti = Ai[ok], Ti[ok]
+        ok = b.real[Ai, Ti]
+        A.append(Ai[ok]); TT.append(Ti[ok]); FF.append(np.full(int(ok.sum()), fi))
+    A, TT, FF = np.concatenate(A), np.concatenate(TT), np.concatenate(FF)
+    out = dict(sym=np.array(b.syms)[A], t_abs=TT + b.t0)
+    for arm, sd, pf, slot in models:
+        P = np.zeros(len(A), np.float32)
+        for fi, (fn, s_abs, _) in enumerate(D.FOLDS):
+            m, _ = R.load(pf(fn), fn, s_abs); i = np.flatnonzero(FF == fi)
+            P[i] = R.med(m, A[i], TT[i], fi, [slot])[:, 0]; del m
+        out[f"{arm}_s{sd}"] = P
+    np.savez(os.path.join(out_dir, "wide.tmp.npz"), **out); os.replace(os.path.join(out_dir, "wide.tmp.npz"), os.path.join(out_dir, "wide.npz"))
+    print("wide rows", len(A), "symbols", len(ids), flush=True)
+    # truncation test: every bank value after the origin replaced by noise, forecasts at that origin must not move
+    res = {}
+    for day in ("2023-03-06", "2024-01-08", "2025-03-03"):
+        ts = int(np.datetime64(day, "h").astype(np.int64)) - 1 - b.t0
+        i = np.flatnonzero(TT == ts); fi = int(FF[i[0]]); fn, s_abs, _ = D.FOLDS[fi]; saved = {}
+        for k, v in b.g.items():
+            cut = ts + 2 if k in ("cs2", "cs5", "csn", "mkt") else ts + 1
+            saved[k] = v[..., cut:].clone(); v[..., cut:] = (torch.randn(saved[k].shape, device=v.device) * 3).to(v.dtype)
+        d = {}
+        for arm, sd, pf, slot in models:
+            m, _ = R.load(pf(fn), fn, s_abs)
+            d[f"{arm}_s{sd}"] = float(np.max(np.abs(R.med(m, A[i], TT[i], fi, [slot])[:, 0] - out[f"{arm}_s{sd}"][i]))); del m
+        for k, v in b.g.items():
+            cut = ts + 2 if k in ("cs2", "cs5", "csn", "mkt") else ts + 1
+            v[..., cut:] = saved[k]
+        res[day] = dict(rows=int(len(i)), max_abs_diff=d)
+        print("truncation", day, res[day], flush=True)
+    m, _ = R.load(models[0][2](D.FOLDS[0][0]), D.FOLDS[0][0], D.FOLDS[0][1]); i = np.flatnonzero(FF == 0)[:4096]
+    res["restore_check_max_abs_diff"] = float(np.max(np.abs(R.med(m, A[i], TT[i], 0, [H24])[:, 0] - out["mkt+r24_s0"][i])))
+    json.dump(res, open(os.path.join(out_dir, "trunc_forecast.json"), "w"), indent=1)
+    print("WIDE DONE", flush=True)
+
+
 def labels(b, a, t):
     """realised log returns at 24 / 72 / 168 h; NaN where there is no bar h hours ahead."""
     lp = b.g["logp"].cpu().numpy()
@@ -158,12 +219,14 @@ def labels(b, a, t):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["train", "pred"])
+    ap.add_argument("cmd", choices=["train", "pred", "wide"])
     ap.add_argument("--hs", default="72,168")
     ap.add_argument("--seeds", default="0,1")
     a = ap.parse_args()
     hs, seeds = [int(x) for x in a.hs.split(",")], [int(x) for x in a.seeds.split(",")]
     torch.backends.cuda.matmul.allow_tf32 = True
+    if a.cmd == "wide":
+        wide(seeds); sys.exit()
     R = RH("cuda", vram_gb=3.2)
     b = R.bank
     os.makedirs(os.path.join(OUT, "val"), exist_ok=True)
