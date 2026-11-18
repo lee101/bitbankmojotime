@@ -48,9 +48,13 @@ Checked with binancegomojo `deploy/isa_check.py`: 0 forms outside the baseline.
 | vs the research file (written on a GPU with TF32 matmuls) | <= 2.5e-4 of scale; ensemble max abs 1.6e-5 (median abs forecast 1.6e-3); min per-day rank correlation 0.9997; 2 of 140 M10 ranks differ |
 | online liveness rule (48 h forward fill, no knowledge of later bars) vs bank liveness | <= 1.4e-3 of scale; 0 of 140 M10 ranks differ |
 
-Unit tests (mock venue, always run): at most 4 requests in flight, nine 429s retried, hard-failing symbols reported and the rest kept, resume
-fetches only what is missing, next day fetches only new bars, no open bar stored, no partial files; file round trip and strict reader;
-inputs vs an independent numpy version; end to end refresh -> Mojo -> file with catch-up, idempotent re-run, gates and model pin.
+Unit tests (mock venue, always run; 9): at most 4 requests in flight, nine 429s retried, hard-failing symbols reported and the rest kept, resume
+fetches only what is missing, next day fetches only new bars, no open bar stored, no partial files, Binance and KuCoin response shapes give the same
+cache; file round trip and strict reader; inputs vs an independent numpy version; end to end refresh -> Mojo -> file with catch-up, idempotent
+re-run, gates and model pin; a run started seconds after 00:00 retries until the venue serves the 23:00 bar (`--retry-s`).
+
+Run path without numpy: the packaged files under `python3 -I -S` (no site packages) from the seed file: refresh 21.6 s + 17 days caught up 5.1 s;
+the next run exits in 0.2 s with no request.
 
 Real KuCoin run from this box (`data/universe.json` pool, 343 symbols asked, 165 listed on KuCoin, pool alive 155): one daily run
 22.3 s wall (166 requests, 21.2 s paced refresh; 0.8 s inputs + inference for 43 coins x 2 seeds), 3.5 s CPU, no 429. Cold start with 48 days
@@ -58,10 +62,13 @@ of history: 41.7 s, 331 requests. Two independent caches give the same file.
 
 ## Known gaps
 
-- Venue transfer: the weights in hand were trained on Binance klines with a 333-symbol pool. Fed with KuCoin klines (155 pool symbols alive),
-  October 2026 forecasts vs the research file: rank correlation 0.87 over 43 coins, 0.94 on the M10 coins (min 0.77 over 30 days), 119 of 300
-  M10 ranks differ, mean multiplier change 0.06. This is not the confirmed signal bit for bit until weights trained on KuCoin klines
-  (branch `agent/lic2`) replace these; the writer and file do not change then (new weight files, new hash, new seeded history).
+- Venue transfer: the weights in hand were trained on Binance klines. Fed Binance klines the inputs are the research inputs bit for bit (table above).
+  Fed KuCoin klines, October 2026 (30 days) vs the research file: rank correlation 0.87 over 43 coins, 0.94 on the M10 coins (min 0.77), 119 of 300
+  M10 ranks differ, mean multiplier change 0.06. Cause (27 days, M10, same weights): KuCoin bars for the coin itself with the Binance pool 0.951;
+  Binance bars with the pool cut to the symbols KuCoin lists 0.993; both 0.942. So it is the coin's own high / low bars (KuCoin hourly ranges are
+  about 6 % narrower at the median), not the pool. Use `--venue` = the venue the weights were trained on: `binance` for these weights (the
+  Binance REST path is tested against a mock only, this box gets HTTP 451), `kucoin` for weights trained on KuCoin klines (branch `agent/lic2`);
+  writer and file contract do not change with the weights (new weight files, new hash, new seeded history).
 - The 6200-hour listing age the research rows required is not checked (a 561-bar window cannot see it); irrelevant for the coins the bots trade.
 - A pool symbol whose first bar inside the fetched window follows a gap longer than 48 h is treated as newly listed.
 - The pool aggregation runs in Python, not in the Mojo CLI: the kline refresh has to be Python anyway and the aggregation is 80 k additions

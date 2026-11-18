@@ -122,7 +122,7 @@ class Binance:
         return x
 
     def listed(s, http, base):
-        j = http.get(f"{base}/api/v3/exchangeInfo?permissions=SPOT")
+        j = http.get(f"{base}/api/v3/exchangeInfo")
         return {d["symbol"] for d in j["symbols"] if d.get("quoteAsset") == "USDT" and d.get("status") == "TRADING"}
 
     def klines(s, http, base, x, h0, h1):

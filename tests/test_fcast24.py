@@ -57,6 +57,14 @@ class Venue:
                     time.sleep(v.delay)
                     if u.path == "/api/v2/symbols":
                         body = dict(code="200000", data=[dict(symbol=x[:-4] + "-USDT", quoteCurrency="USDT", enableTrading=True) for x in v.syms])
+                    elif u.path == "/api/v3/exchangeInfo":             # Binance shapes
+                        body = dict(symbols=[dict(symbol=x, status="TRADING", quoteAsset="USDT") for x in v.syms] + [dict(symbol="OLDUSDT", status="BREAK", quoteAsset="USDT")])
+                    elif u.path == "/api/v3/klines":
+                        x = q["symbol"]; a_, b_ = int(q["startTime"]) // 1000, int(q["endTime"]) // 1000
+                        with v.lock:
+                            v.asked.append((x, a_ // H, b_ // H))
+                        rows = [r for r in v.bars(x, a_, b_)[::-1] if a_ <= int(r[0]) <= b_][:int(q.get("limit", 500))]
+                        body = [[int(r[0]) * 1000, r[1], r[3], r[4], r[2], r[5], int(r[0]) * 1000 + 3599999, r[6], 5, "1", "1", "0"] for r in rows]
                     else:
                         x = q["symbol"].replace("-", "")
                         with v.lock:
@@ -110,6 +118,20 @@ def test_refresh_polite_resumable_atomic(tmp_path):
     before = {f: open(os.path.join(cache, f)).read() for f in os.listdir(cache)}
     st4, _ = refresh(v, base, cache, T_END + 24)                      # nothing to do: no kline request, files untouched
     assert st4["skipped"] == 24 and st4["http"] == 1 and before == {f: open(os.path.join(cache, f)).read() for f in os.listdir(cache)}
+    srv.shutdown()
+
+
+def test_binance_shapes_give_the_same_bars(tmp_path):
+    v = Venue(SY[:6] , T_END, gaps=("C03USDT",)); srv, base = v.serve()
+    a, b = str(tmp_path / "kc"), str(tmp_path / "bn")
+    s1 = F.refresh("kucoin", SY[:6] + ["OLDUSDT"], a, T_END, 1700, F.Http(rps=400), base, now=(T_END + 1) * H)       # 1700 bars: two requests per symbol on both venues
+    s2 = F.refresh("binance", SY[:6] + ["OLDUSDT"], b, T_END, 1700, F.Http(rps=400), base, now=(T_END + 1) * H)
+    assert s1["listed"] == s2["listed"] == 6 and s1["failed"] == s2["failed"] == 0 and s1["http"] == s2["http"] == 13
+    for x in SY[:6]:
+        assert open(os.path.join(a, x + ".csv")).read() == open(os.path.join(b, x + ".csv")).read()
+    frm, to, rows = F.cache_read(b, "C00USDT")
+    o, h, l, c, qv = rows[T_END]
+    assert len(rows) == 1700 and c == v.price("C00USDT", T_END) and o == v.price("C00USDT", T_END - 1) and h >= max(o, c) > min(o, c) >= l and qv == 1000.0
     srv.shutdown()
 
 
