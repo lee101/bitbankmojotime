@@ -181,9 +181,25 @@ def post(pred, cache):
     print(json.dumps(out, indent=0))
 
 
+def table(*paths):
+    """gate JSONs -> rows in the wave 4c/4d format + the registered bar (INNOVATION at both costs, >= 10/16 universes, turnover <= +2 %)."""
+    for p in paths:
+        o = json.load(open(p)); ok = True
+        for c in ("c7", "c10"):
+            r = o[c]; pm = r["placebo_mds"]; tu = float(np.median(r["turnover_change_median_by_universe"]))
+            print(f"| {os.path.relpath(p)} | {c} | {r['mds']:+.3f} [{r['mds_lo']:+.3f}, {r['mds_hi']:+.3f}] | {100 * r['share']:.0f} % | {r['bp']:+.2f} [{r['bp_lo']:+.2f}, {r['bp_hi']:+.2f}] | "
+                  f"{r['years']}/4 ({' '.join(f'{x:+.2f}' for x in r['ydS'])}) | {r['nu_pos']}/{r['nu']} | {np.percentile(pm, 95):+.3f} / {max(pm):+.3f} | {100 * tu:+.1f} % | "
+                  f"{r['ruin']['off']:.1f} -> {r['ruin']['on']:.1f} | {r['class']} |")
+            ok &= r["class"] == "INNOVATION" and r["nu_pos"] >= 10 and tu <= 0.02
+        print("  bar:", "PASS" if ok else "lean" if all(o[c]["mds_lo"] > 0 for c in ("c7", "c10")) else "fail",
+              "| above all placebos:", all(o[c]["mds"] > max(o[c]["placebo_mds"]) for c in ("c7", "c10")))
+
+
 if __name__ == "__main__":
     c, a = sys.argv[1], sys.argv[2:]
-    if c == "hyb":
+    if c == "table":
+        table(*a)
+    elif c == "hyb":
         hyb(*a)
     elif c in ("cells", "merge"):
         cells(*a, merge=c == "merge")

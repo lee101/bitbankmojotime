@@ -4,7 +4,7 @@
   python tools/kucoin_cache.py build <dir>             <dir>/cache/{hourly,index_1h*.json,pairs.json}, <dir>/universe.json
   python tools/kucoin_cache.py okx <dir> BASE[,BASE]   OKX history-candles 1H for the named bases -> <dir>/okx/hourly/<BASE>USDT.npz
 """
-import gzip, json, os, re, sys, threading, time, urllib.error, urllib.request
+import gzip, http.client, json, os, re, sys, threading, time, urllib.error, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bench"))
@@ -24,7 +24,7 @@ ALGO = "ADA ALGO ATOM AVAX BAND BAT BCH BNB BTC CHZ DASH DOGE DOT ENJ ETC ETH HB
 HARN = sorted(set(CONF) | set(ALGO))
 E22, E23 = D.eh(2022) * 3600, D.eh(2023) * 3600
 
-_lk, _next, _hold, _nreq = threading.Lock(), [0.0], [0.0], [0]
+_lk, _next, _hold, _nreq, _tl = threading.Lock(), [0.0], [0.0], [0], threading.local()
 
 
 def get(url, tries=8):
@@ -36,10 +36,18 @@ def get(url, tries=8):
             _nreq[0] += 1
         time.sleep(max(0.0, t - time.time()))
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=40) as r:
-                b = r.read()
-                if r.headers.get("Content-Encoding") == "gzip":
-                    b = gzip.decompress(b)
+            u = urllib.parse.urlsplit(url)
+            cs = _tl.__dict__.setdefault("c", {})
+            c = cs.get(u.netloc) or cs.setdefault(u.netloc, http.client.HTTPSConnection(u.netloc, timeout=40))   # one kept-alive connection per worker
+            try:
+                c.request("GET", u.path + "?" + u.query, headers=UA)
+                r = c.getresponse(); b = r.read()
+            except Exception:
+                c.close(); cs.pop(u.netloc, None); raise
+            if r.getheader("Content-Encoding") == "gzip":
+                b = gzip.decompress(b)
+            if r.status >= 400:
+                raise urllib.error.HTTPError(url, r.status, "http", None, None)
             j = json.loads(b)
             if str(j.get("code")) in ("429000", "50011"):
                 raise urllib.error.HTTPError(url, 429, "rate", None, None)

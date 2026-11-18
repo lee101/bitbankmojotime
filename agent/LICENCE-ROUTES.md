@@ -104,6 +104,76 @@ including the creation of derived works to be used internally by Client solely f
 extent, Client seeks to commercialize any derived works into a client-facing product, Client shall contact Supplier". Pricing by
 quote (`https://www.kaiko.com/about-kaiko/pricing-and-contracts`).
 
+KuCoin (added for wave 4e; typographic quotes normalised here and for OKX). Terms of Use `https://www.kucoin.com/legal/terms-of-use`,
+"Last updated: 10/29/2026 11:30:00" (live page). The public site links no separate API or market-data terms, and the API docs index
+(`https://www.kucoin.com/docs-new/llms.txt`) lists none; whatever the API-key creation page shows behind login was not read. The
+Terms of Use have no clause on APIs, machine learning or model training. They define the Platform as KuCoin (www.kucoin.com).
+- Art. 89: "Intellectual property rights, including trademark rights, patent rights, copyrights, trade secrets, and so on, to all the
+  content on the Platform, including works, pictures, archives, information, materials, platform architecture, the arrangement of the
+  platform screen, platform design, text and graphics, software compilation, the relevant source code and software, are legally owned
+  by the Platform or other rights-holders."
+- Art. 90: "Without the written consent of the Platform or other rights-holders, no one is allowed to use, modify, copy, publicly
+  disseminate, change, distribute, release or publicly publish the Platform program or content without due authorization."
+- Art. 91: "The Users are not allowed to download (except for web page caches) or modify the Platform or any part thereof without the
+  explicit written consent of the Platform. The Users are not allowed to resell or make commercial use of the Platform or any content
+  thereof; the Users may not: collect and use product catalogues, descriptions and prices, make any derivatives of the Platform or
+  content thereof; download or copy account information or use any data collection robots or similar data collection and extraction
+  tools for other commercial interests. Without the written permission of the Platform, it is strictly prohibited to systematically
+  obtain the content of the Platform to directly or indirectly create or edit collections, compilations, databases, or personal name
+  and address records (whether or not through robots, spiders, automatic instruments, or manual operations). In addition, it is
+  strictly prohibited to use the content and materials on the Platform for any purpose that is not explicitly permitted by the Terms
+  of Use."
+- Art. 92: "Without the explicit written consent of the Platform, the Platform website or any part thereof may not be copied,
+  photocopied, duplicated, sold, resold, accessed or otherwise used for any commercial purpose."
+- API product page `https://www.kucoin.com/api` (marketing text, not terms): "High-performance, low-latency, full-featured APIs for
+  fast, secure integration with the KuCoin ecosystem. Designed to support stable, reliable quantitative trading systems."; its FAQ:
+  "You can download KuCoin's historical market data from our Historical Data page for backtesting and research."
+- Klines endpoint docs (`https://www.kucoin.com/docs-new/rest/spot-trading/market-data/get-klines.md`): rate-limit pool "Public",
+  weight 3; "Klines data may be incomplete. No data is published for intervals where there are no ticks."
+- Reading: no machine-learning clause, no trading-use clause, no API-specific grant. Articles 89-92 are written for the Platform and
+  its content: no commercial use of the content, no collecting of prices, no extraction tools "for other commercial interests", no
+  systematic building of databases without written permission, no use "for any purpose that is not explicitly permitted". KuCoin
+  itself publishes the API, its rate limits and a history download "for backtesting and research". The text does not say whether API
+  bars pulled to size the owner's own orders on KuCoin fall inside or outside these articles.
+
+OKX (added for wave 4e). API Agreement `https://www.okx.com/help/okx-api-agreement`, "Published on Mar 26, 2026", "Last Updated: 28
+July 2026" (live page, served here as the `en-us` copy; the `en-au`, `en-gb`, `en-eu` and `en-sg` copies carry the same date and the
+sentences quoted from 9.3 and 9.4). Terms of Service `https://www.okx.com/help/terms-of-service`, "Last Updated: 29 October 2026",
+4.3: "For the API Services, please refer to the OKX API Agreement".
+- 1.8: "Market Data" means "any price, order book, trade history, ticker, funding rate, index, volatility surface, open interest,
+  trading volume, or other market information made available through the API Services or through OKX's publicly accessible
+  endpoints, whether accessed with or without authentication."
+- 3.3: "Users may access the API Services for lawful trading, account management, market data consumption, and integration purposes."
+- 9.2: a licence "to access and use the API Services solely: (a) for your own internal purposes; (b) in connection with managing and
+  operating your own OKX account; and (c) in a manner consistent with this Agreement and the OKX ToS."
+- 9.3: "For the avoidance of doubt, use of the API Services to execute trades for your own account, even if profitable, does not
+  constitute commercial resale."
+- 9.4: "Market Data obtained through the API Services is proprietary to OKX or its data licensors. You may access and use Market Data
+  solely for your own personal, non-commercial trading and account management purposes. You may not: (a) resell, redistribute,
+  publish, display, or otherwise make Market Data available to any third party, whether for commercial gain or otherwise, without
+  OKX's prior written consent; (b) use Market Data to build, operate, or contribute to any competing data product, market data
+  service, financial data aggregator, price feed, or analytics platform; (c) use Market Data to train, fine-tune, or evaluate any
+  machine learning model or AI system that is intended to be commercialized or made available to third parties; or (d) use Market
+  Data in any manner that competes with or substitutes for OKX's commercial data licensing offerings."
+- 9.4, public endpoints: "The restrictions in this Section 9.4 apply equally to Market Data accessed through public endpoints as to
+  Market Data accessed through authenticated endpoints."
+- 9.4, automated collection: "You must not use automated scripts, bots, web scrapers, or any other automated means to extract Market
+  Data from OKX's public endpoints or website at a rate or scale that: (a) exceeds what is reasonably necessary for your personal
+  trading use; (b) is intended to circumvent OKX's commercial data licensing requirements; or (c) imposes unreasonable load on OKX's
+  infrastructure. Users who require high-frequency or large-scale access to Market Data for commercial or institutional purposes must
+  obtain a separate data licensing agreement with OKX."
+- 13.3: "Users must not use data obtained through the API Services to train or fine-tune any AI model in a manner that incorporates or
+  exposes other users' personal data or OKX's proprietary Market Data contrary to Section 9.4."
+- ToS 8.1: "We grant you a limited, non-exclusive, non-transferable license, subject to the Terms, to access and use our OKX Platform
+  and Services, solely for purposes permitted by us. You agree that you will not copy, transmit, distribute, sell, license, reverse
+  engineer, modify, publish, or participate in the transfer or sale of, create derivative works from, or in any other way, exploit
+  any of our products and Services."
+- Reading: the only text in this survey that speaks to model training on a venue's own API data, and it does so conditionally: the
+  bar in 9.4(c) is on a model "intended to be commercialized or made available to third parties". Market Data is for "your own
+  personal, non-commercial trading and account management purposes"; 9.3 says trading one's own account "even if profitable" is not
+  commercial resale (that sentence is about the API Services). Automated extraction beyond what is "reasonably necessary for your
+  personal trading use" needs a data licence.
+
 ## 2. Which sources reach the needed cross-section
 
 `mkt+r24` needs hourly OHLC per symbol, a market pool large enough for the mean / dispersion / breadth series, groups of at least 8
