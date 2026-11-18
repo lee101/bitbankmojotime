@@ -96,3 +96,35 @@ shows: in wave 4f its max drawdown and ruin view were above base.
   wave 4c resume cache. R9's numbers are wave 4c / 4f data, nothing new.
 
 Compute: <= 8 threads, no GPU, caches deleted after the JSONs are written.
+
+## Amendment (2026-11-18, about 21:15 UTC): timing versus static preference of the frozen `gt`
+
+Committed before any run of it, after the REGEAR2 result (wave 4g). It does not change the rule above. Reason: every placebo so far for
+`gt` shuffled the forecast ranks across coins within a day, which removes the day-level timing and the forecaster's static coin
+preference together; a parallel track found most of its weekly rank IC to be a static asset effect.
+
+Frozen `gt` at k 1, c7 and c10, window as before. Universes: the 14 lead + R9-R24 (stored; primary, "stored30"), and R41-R56
+(rebuilt deterministically, base re-simulated). Code `tools/r24regear.py` `run3`, `ana3`, `pref`; outputs `runs-agent/regear2/timing.json`.
+
+1. Circular-shift placebo. Inside the forecast window (L days) every coin's forecast series is shifted by the same offset with
+   wrap-around (day d gets the forecasts of day d + s) and ranks are recomputed per day, so each day's cross-section is a real one from
+   another date: every coin's forecast distribution and the static cross-sectional preference are kept, the alignment with the day is
+   destroyed. 20 offsets s_j = round((j + 1) L / 21), j = 0..19 (each at least L / 21, about 66 days, from the true alignment on both
+   sides), the same for all universes; a pooled placebo value = `gt` with offset j on all universes. For compute the placebo arms run
+   on every third configuration of the family (1,001; on M11 also the ruin points); the real `gt` is reported on the full family and,
+   for every paired comparison, on the same 1,001. Reported: placebo mean d Sharpe distribution (mean, sd, min .. max, p95), the real
+   value's rank among the 21, real minus placebo mean with the paired month-block bootstrap interval and with the range over offsets.
+2. Static-preference arm. The daily rank is replaced by each coin's expanding-window mean rank fraction over the forecast days before
+   the day (no look-ahead), on the same (day, coin) cells: `sr` = its cross-sectional rank fraction among those coins (the multiplier
+   spread of `gt`; primary), `st` = the mean rank fraction itself as written in the request (compressed towards 0.5, so a weaker tilt).
+   Full family, same form. With it a description of the preference (`pref`): mean rank per coin, between-coin share of the rank
+   variance, half-sample persistence, rank correlation with trailing 30-day volatility, 30-day return and 30-day quote volume (size
+   proxy; no market capitalisation in the archive).
+3. The same arms for the pooled risk measures: median paired worst month, 21-day, 60-day and max drawdown, volatility ratio, and the
+   ruin view on M11 (27 of the 99 ruin points for base, real, every offset and the static arms).
+
+Wording of the result, on stored30 at each cost: timing share X = 1 - (placebo mean) / real; static-preference share Y = (placebo mean
+- within-day-shuffle mean) / real; the remainder Z = within-day-shuffle mean / real is the form's mechanics (stored shuffle means of
+waves 4b / 4c, 10 and 20 draws, weighted 14 : 16). "Timing carries X of the gain, static preference Y". On R41-R56 there is no
+within-day shuffle, so only X is given there. The `sr` arm is the no-look-ahead check of Y + Z. No pass / fail bar: a decomposition.
+If the deadline cuts the R41-R56 part, the offsets completed on all 16 universes are reported with their count.

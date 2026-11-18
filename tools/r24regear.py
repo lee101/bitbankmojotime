@@ -479,10 +479,138 @@ def ana2():
     open(f"{OUT}/regear2.md", "w").write("\n".join(L) + "\n"); print("\n".join(L[:6]))
 
 
+# ---------------------------------------------------------------- PREREG-REGEAR2 amendment: timing vs static preference of the frozen gt (k 1)
+NOFF = 20; FULLARMS = ("gt1.00", "sr", "st")
+def fwin(F): ok = np.isfinite(F).any(1); return int(np.argmax(ok)), len(ok) - 1 - int(np.argmax(ok[::-1]))
+def shift_F(F, j):
+    """circular time shift inside the forecast window, the same offset for every coin: day d gets the forecasts of day d + s (wrap-around),
+    s = round((j + 1) L / (NOFF + 1)) days, so every offset is at least L / 21 > 30 days from the true alignment on both sides."""
+    d0, d1 = fwin(F); L = d1 - d0 + 1; sft = int(round((j + 1) * L / (NOFF + 1))); out = F.copy(); out[d0:d1 + 1] = np.roll(F[d0:d1 + 1], -sft, axis=0); return out, sft, L
+def static_fr(Fr, rerank):
+    """each coin's expanding mean rank fraction over the forecast days before d (no look-ahead), on the (day, coin) cells gt tilts; rerank: its
+    cross-sectional rank fraction among those coins (the multiplier spread of gt)."""
+    ok = np.isfinite(Fr); z = np.zeros((1, Fr.shape[1])); ps = np.vstack([z, np.cumsum(np.where(ok, Fr, 0.0), 0)[:-1]]); pn = np.vstack([z, np.cumsum(ok, 0)[:-1]])
+    with np.errstate(all="ignore"): m = np.where(ok & (pn > 0), ps / np.maximum(pn, 1), np.nan)
+    if not rerank: return m
+    out = np.full_like(Fr, np.nan)
+    for d in range(len(m)):
+        k = np.isfinite(m[d])
+        if k.sum() >= 2: out[d, k] = RB.rk(m[d, k]) / (k.sum() - 1)
+    return out
+def run3(us):
+    """arms at k 1: gt1.00, b1.00, sr / st (static preference, re-ranked / literal mean rank) on the full family; cs00..cs19 (circular shift) on
+    every third configuration (+ the 27 ruin points on M11). Ruin view on M11 (27 points)."""
+    al.GCAL = slib.Cal(RB.restrict(slib.U("M11"))); cf = slib.arm_cfgs("base"); cnt = draws(); ar = ruin_mod(); pts = slib.ruin_points(); pts2 = [p for p in pts if p >= 96 or p % 4 == 0]
+    os.makedirs(f"{TMP}/cell", exist_ok=True); SUB = np.arange(0, len(cf), 3)
+    for u in us:
+        Uo = RB.restrict(slib.U(u)); cal = slib.Cal(Uo); z = np.load(fc_file(u)); nx = np.array([x not in slib.NOX for x in Uo.sy]); F = RB.fmat(Uo, z, "mkt+r24"); Fr = G.frac(F, nx)
+        IDX = sorted(set(SUB.tolist()) | set(pts2)) if u == "M11" else SUB.tolist(); pos = {i: q for q, i in enumerate(IDX)}; sp = np.array([pos[i] for i in SUB]); b0 = {}
+        def base(c):
+            if c not in b0:
+                E0, T0 = base_new(Uo, u, c, cf) if u in NEW else (base_E(u, c), base_T(u, c)); m0, R0 = metrics(E0, cal); S, Q, L, npm = msums(R0, cal); b0[c] = (E0, m0, boot_parts(S, Q, L, npm, cnt), T0)
+            return b0[c]
+        arms = [("gt1.00", lambda: Fr), ("b1.00", None), ("sr", lambda: static_fr(Fr, True)), ("st", lambda: static_fr(Fr, False))] + [(f"cs{j:02d}", (lambda j=j: G.frac(shift_F(F, j)[0], nx))) for j in range(NOFF)]
+        for a, fr in arms:
+            todo = [c for c in al.COSTS if not os.path.exists(cellf(u, c, a))]
+            if not todo: continue
+            full = a in FULLARMS or a == "b1.00"; wf = cv.make_wfun(Uo, cv.Arm("base") if fr is None else gt_arm(Uo, fr())); cfa = cf if full else [cf[i] for i in IDX]; q_ = SUB if full else sp
+            for c in todo:
+                quiet(); E0, m0, (bS0, bC0), T0 = base(c)
+                E, T = (E0, T0) if a == "b1.00" else slib.run_arm(Uo, cfa, c, True, False, wfun=wf)[:2]
+                m, R = metrics(E, cal); S, Q, L, npm = msums(R, cal); bS, bC = boot_parts(S, Q, L, npm, cnt)
+                o = {x: (m[x] if full else m[x][q_]) for x in MET}; o["turn"] = T if full else T[q_]; o["bS_sub"] = (bS[:, q_] - bS0[:, SUB]).mean(1); o["bC_sub"] = (bC[:, q_] - bC0[:, SUB]).mean(1)
+                if full: o.update(bS=(bS - bS0).mean(1), bC=(bC - bC0).mean(1), gross=gross(wf, cf, Uo.k0))
+                if u == "M11":
+                    rp = pts2 if full else [pos[x] for x in pts2]; v = ar.view(E, wf, cal, Uo, rp, cfa); o["ruin_w"] = np.array([max(v[x][y]["dd60"] for y in SC) for x in rp])
+                np.savez(cellf(u, c, a) + ".tmp.npz", **o); os.replace(cellf(u, c, a) + ".tmp.npz", cellf(u, c, a))
+            print(u, a, "done", flush=True)
+    print("RUN3_DONE", ",".join(us), flush=True)
+
+
+def ana3():
+    """timing vs static preference: real gt, circular-shift placebo, static-preference arms; per universe set and cost."""
+    SUB = np.arange(0, len(slib.sample()), 3); cs = [f"cs{j:02d}" for j in range(NOFF)]; out = {}; shuf = {}
+    for nm, f, n in (("lead", f"{AG}/gate/gate_gt.json", len(LEAD)), ("conf", f"{AG}/confirm/gate_gt.json", len(CONF))):
+        j = json.load(open(f)); shuf[nm] = {c: (float(np.mean(j[c]["placebo_mds"])), float(np.max(j[c]["placebo_mds"])), len(j[c]["placebo_mds"]), j[c]["mds"]) for c in al.COSTS}
+    def have(us, arms): return all(os.path.exists(cellf(u, c, a)) for u in us for c in al.COSTS for a in arms)
+    sets = [("stored30", LEAD + CONF), ("lead", LEAD), ("conf", CONF), ("new", NEW)]
+    for nm, us in sets:
+        if not have(us, ["gt1.00", "b1.00", "sr", "st"]): continue
+        noff = [a for a in cs if have(us, [a])]
+        for c in al.COSTS:
+            ld = lambda a: {u: dict(np.load(cellf(u, c, a))) for u in us}
+            B = ld("b1.00"); r = {"universes": len(us), "offsets": len(noff)}
+            def stat(A, sub):
+                ix = (lambda x: x[SUB]) if sub == "full2sub" else (lambda x: x); bix = (lambda x: x[SUB]) if sub else (lambda x: x); d = {}
+                dS = [np.nan_to_num(ix(A[u]["sharpe"]) - bix(B[u]["sharpe"])) for u in us]; d["mds"] = float(np.mean([x.mean() for x in dS])); d["mds_u"] = [float(x.mean()) for x in dS]; d["share"] = float((np.concatenate(dS) > 0).mean())
+                for q in ("cagr", "wm", "dd21", "dd60", "mdd", "vol"):
+                    d["d_" + q] = float(np.median(np.concatenate([ix(A[u][q]) - bix(B[u][q]) for u in us])))
+                d["vol_ratio"] = float(np.median(np.concatenate([ix(A[u]["vol"]) / bix(B[u]["vol"]) for u in us]))); d["turn"] = float(np.median([np.median((ix(A[u]["turn"]) - bix(B[u]["turn"])) / np.maximum(bix(B[u]["turn"]), 1e-9)) for u in us]))
+                d["mdC"] = float(np.mean([(ix(A[u]["cagr"]) - bix(B[u]["cagr"])).mean() for u in us])); return d
+            bvec = lambda A, k: np.mean([A[u][k] for u in us], 0); ci = lambda v: [float(np.percentile(v, 2.5)), float(np.percentile(v, 97.5))]
+            A = ld("gt1.00"); r["real_full"] = stat(A, None); r["real_full"]["mds_ci"] = ci(bvec(A, "bS")); r["real_sub"] = stat(A, "full2sub"); real_b = bvec(A, "bS_sub"); r["real_sub"]["mds_ci"] = ci(real_b)
+            if "gross" in A[us[0]]: r["real_full"]["gross"] = float(np.median(np.concatenate([A[u]["gross"] for u in us]))); r["base_gross"] = float(np.median(np.concatenate([B[u]["gross"] for u in us])))
+            for a in ("sr", "st"):
+                X = ld(a); r[a] = stat(X, None); r[a]["mds_ci"] = ci(bvec(X, "bS")); r[a]["real_minus"] = r["real_full"]["mds"] - r[a]["mds"]; r[a]["real_minus_ci"] = ci(bvec(A, "bS") - bvec(X, "bS"))
+                r[a]["gross"] = float(np.median(np.concatenate([X[u]["gross"] for u in us]))); r[a]["nu_pos"] = int(sum(x > 0 for x in r[a]["mds_u"])); r[a]["share_of_real"] = r[a]["mds"] / r["real_full"]["mds"]
+                if "M11" in us: r[a]["ruin"] = 100 * float(np.median(X["M11"]["ruin_w"]))
+            if "M11" in us: r["ruin_base"] = 100 * float(np.median(B["M11"]["ruin_w"])); r["ruin_real"] = 100 * float(np.median(A["M11"]["ruin_w"]))
+            if noff:
+                P = [ld(a) for a in noff]; ps = [stat(X, "sub") for X in P]; pm = np.array([x["mds"] for x in ps]); pb = np.mean([bvec(X, "bS_sub") for X in P], 0); rs = r["real_sub"]["mds"]
+                r["shift"] = dict(mds=[float(x) for x in pm], mean=float(pm.mean()), sd=float(pm.std(ddof=1)), min=float(pm.min()), max=float(pm.max()), p95=float(np.percentile(pm, 95)), real_rank=int(1 + (pm >= rs).sum()), n=len(pm),
+                                  real_minus_mean=float(rs - pm.mean()), real_minus_ci_boot=ci(real_b - pb), real_minus_range=[float(rs - pm.max()), float(rs - pm.min())], nu_real_above_mean=int(sum(a_ > np.mean([x["mds_u"][i] for x in ps]) for i, a_ in enumerate(r["real_sub"]["mds_u"]))))
+                for q in ("d_cagr", "d_wm", "d_dd21", "d_dd60", "d_mdd", "vol_ratio", "turn", "share"):
+                    v = np.array([x[q] for x in ps]); r["shift"][q] = dict(mean=float(v.mean()), min=float(v.min()), max=float(v.max()), real=r["real_sub"][q])
+                if "M11" in us: v = np.array([100 * float(np.median(X["M11"]["ruin_w"])) for X in P]); r["shift"]["ruin"] = dict(mean=float(v.mean()), min=float(v.min()), max=float(v.max()), real=r["ruin_real"], base=r["ruin_base"])
+                key = nm if nm in shuf else None; sm = None
+                if nm == "stored30": sm = (len(LEAD) * shuf["lead"][c][0] + len(CONF) * shuf["conf"][c][0]) / (len(LEAD) + len(CONF))
+                elif key: sm = shuf[key][c][0]
+                r["shuffle_mean"] = sm; r["timing_share"] = float(1 - pm.mean() / rs)
+                if sm is not None: r["static_share"] = float((pm.mean() - sm) / rs); r["mechanics_share"] = float(sm / rs)
+            out[f"{nm}|{c}"] = r
+    json.dump(out, open(f"{OUT}/timing.json", "w"), indent=1); L = []
+    for k, r in out.items():
+        L.append(f"## {k}: universes {r['universes']}, offsets {r['offsets']}")
+        L.append(f"real gt: full family d Sharpe {r['real_full']['mds']:+.3f} [{r['real_full']['mds_ci'][0]:+.3f}, {r['real_full']['mds_ci'][1]:+.3f}]; every-third subsample {r['real_sub']['mds']:+.3f}")
+        if "shift" in r:
+            s_ = r["shift"]; L.append(f"circular shift ({s_['n']}): mean {s_['mean']:+.3f}, sd {s_['sd']:.3f}, min {s_['min']:+.3f} .. max {s_['max']:+.3f}, p95 {s_['p95']:+.3f}; real rank {s_['real_rank']}/{s_['n'] + 1}; real - shift mean {s_['real_minus_mean']:+.3f} boot [{s_['real_minus_ci_boot'][0]:+.3f}, {s_['real_minus_ci_boot'][1]:+.3f}], over offsets [{s_['real_minus_range'][0]:+.3f}, {s_['real_minus_range'][1]:+.3f}]; universes real > shift mean {s_['nu_real_above_mean']}/{r['universes']}")
+            L.append(f"shares: timing {r['timing_share']:.2f}" + ("" if r.get("static_share") is None else f", static preference {r['static_share']:.2f}, mechanics (within-day shuffle mean {r['shuffle_mean']:+.3f}) {r['mechanics_share']:.2f}"))
+            L.append("risk (median paired d vs base; real | shift mean [min, max]): " + "; ".join(f"{q} {s_[q]['real']:+.2f} | {s_[q]['mean']:+.2f} [{s_[q]['min']:+.2f}, {s_[q]['max']:+.2f}]" for q in ("d_cagr", "d_wm", "d_dd21", "d_dd60", "d_mdd", "vol_ratio", "turn")) + ("" if "ruin" not in s_ else f"; ruin M11 base {s_['ruin']['base']:.1f} real {s_['ruin']['real']:.1f} | shift {s_['ruin']['mean']:.1f} [{s_['ruin']['min']:.1f}, {s_['ruin']['max']:.1f}]"))
+        for a in ("sr", "st"):
+            x = r[a]; L.append(f"static {a}: d Sharpe {x['mds']:+.3f} [{x['mds_ci'][0]:+.3f}, {x['mds_ci'][1]:+.3f}] ({x['share_of_real']:.2f} of real), universes + {x['nu_pos']}/{r['universes']}, real - static {x['real_minus']:+.3f} [{x['real_minus_ci'][0]:+.3f}, {x['real_minus_ci'][1]:+.3f}]; gross {x['gross']:.3f}; d CAGR {x['d_cagr']:+.2f}, wm {x['d_wm']:+.2f}, dd60 {x['d_dd60']:+.2f}, maxDD {x['d_mdd']:+.2f}, vol ratio {x['vol_ratio']:.3f}, turnover {100 * x['turn']:+.1f} %" + ("" if "ruin" not in x else f", ruin {x['ruin']:.1f}"))
+        f_ = r["real_full"]; L.append(f"real full family: gross {f_.get('gross', float('nan')):.3f} (base {r.get('base_gross', float('nan')):.3f}); d CAGR {f_['d_cagr']:+.2f}, wm {f_['d_wm']:+.2f}, dd60 {f_['d_dd60']:+.2f}, maxDD {f_['d_mdd']:+.2f}, vol ratio {f_['vol_ratio']:.3f}, turnover {100 * f_['turn']:+.1f} %"); L.append("")
+    open(f"{OUT}/timing.md", "w").write("\n".join(L) + "\n"); print("\n".join(L))
+
+
+def pref():
+    """descriptive: the forecaster's static coin preference on the 45 forecast coins (daily rank fraction among all of them)."""
+    z = np.load(f"{OUT}/botpred_r41.npz"); syms = sorted(set(z["sym"].tolist())); v = (z["mkt+r24_s0"] + z["mkt+r24_s1"]) / 2; ts = np.unique(z["t_abs"]); F = np.full((len(ts), len(syms)), np.nan)
+    F[np.searchsorted(ts, z["t_abs"]), np.searchsorted(syms, z["sym"])] = v; Fr = G.frac(F, np.ones(len(syms), bool)); days = (ts + 1) * 3600
+    import pandas as pd
+    def daily(s):
+        d = pd.read_csv(f"{slib.D}/bv/{s}.csv", usecols=["ts", "close"]); x = pd.Series(d.close.values.astype(float), index=d.ts.values.astype(np.int64) + 3600); x = x[~x.index.duplicated()]; return x[x.index % 86400 == 0]
+    P = pd.DataFrame({s: daily(s) for s in syms}).sort_index(); lr = np.log(P).diff(); vol = (lr.rolling(30).std() * math.sqrt(365)).reindex(days).values; mom = (np.log(P) - np.log(P.shift(30))).reindex(days).values
+    def qv(s):
+        h = np.load(f"/nvme0n1-disk/code/bitbankmojotime/data/cache/hourly/{s}.npz"); t = h["t"].astype(np.int64); t = t * 3600 if t.max() < 1e7 else (t // 1000 if t.max() > 1e11 else t)
+        x = pd.Series(h["qv"].astype(float), index=(t // 86400) * 86400 + 86400).groupby(level=0).sum(); return np.log(x.rolling(30).mean())
+    try: liq = pd.DataFrame({s: qv(s) for s in syms}).reindex(days).values
+    except Exception as e: liq = None; print("no quote volume:", repr(e)[:100])
+    ok = np.isfinite(Fr); mr = np.nanmean(Fr, 0); h1 = np.nanmean(Fr[:len(Fr) // 2], 0); h2 = np.nanmean(Fr[len(Fr) // 2:], 0); tot = np.nanvar(Fr); btw = np.var(mr)
+    def xs(X):
+        if X is None: return None
+        r = [RB.spear(Fr[d], X[d]) for d in range(len(Fr))]; return float(np.nanmean(r))
+    def coin(X): return None if X is None else float(RB.spear(mr, np.nanmean(np.where(ok, X, np.nan), 0)))
+    ac = lambda k: float(np.nanmean([RB.spear(Fr[d], Fr[d + k]) for d in range(len(Fr) - k)]))
+    o = dict(coins=len(syms), days=len(ts), mean_rank={s: float(x) for s, x in sorted(zip(syms, mr), key=lambda t: -t[1])}, between_coin_share_of_rank_variance=float(btw / tot), half_split_spearman=float(RB.spear(h1, h2)),
+             rank_autocorr={str(k): ac(k) for k in (1, 7, 30, 90, 365)}, daily_xs_spearman=dict(vol30=xs(vol), ret30=xs(mom), log_quote_volume30=xs(liq)), across_coins_spearman_of_mean_rank=dict(vol30=coin(vol), ret30=coin(mom), log_quote_volume30=coin(liq)))
+    json.dump(o, open(f"{OUT}/pref.json", "w"), indent=1); print(json.dumps({k: v for k, v in o.items() if k != "mean_rank"}, indent=1)); print("top", list(o["mean_rank"].items())[:8]); print("bottom", list(o["mean_rank"].items())[-8:])
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1]; os.makedirs(OUT, exist_ok=True)
     if cmd == "run": run(sys.argv[2].split(",") if len(sys.argv) > 2 else (CONF if os.environ.get("GATE_UNIS") == "CONF" else LEAD))
     elif cmd == "live": live()
     elif cmd == "gross": gross_view()
-    elif cmd in ("draw", "fcmerge", "build", "buildcheck", "ana2", "hist"): globals()[cmd]()
+    elif cmd in ("draw", "fcmerge", "build", "buildcheck", "ana2", "hist", "ana3", "pref"): globals()[cmd]()
+    elif cmd == "run3": run3(sys.argv[2].split(","))
     else: ana()
