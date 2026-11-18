@@ -604,3 +604,65 @@ KuCoin settings:
 Reading: the registered rule confirms k 1.20 on new 2023+ universes, with a thin maxDD margin and a CAGR gain whose interval includes
 zero. What pays for the gearing is the tilt's risk reduction, observed only in 2023-26; in 2020-22 the same budget without a tilt cost
 CAGR on the Binance settings and raised the worst month to 26 %.
+
+## Wave 4h: timing versus static preference of the frozen `gt` (amendment to `agent/PREREG-REGEAR2.md`, 2026-11-18)
+
+Every earlier placebo shuffled the forecast ranks across coins within a day, which removes the forecaster's static coin preference
+together with the day-level timing. Here: (1) a circular-shift placebo, every coin's forecast series shifted by the same offset inside
+the forecast window (20 offsets, about 67 to 1,333 days, so each day's cross-section is a real one from another date), which keeps the static
+preference and every coin's forecast distribution and destroys the timing; (2) static-preference arms, the daily rank replaced by the
+coin's expanding mean rank up to the previous day: `sr` re-ranked to the multiplier spread of `gt`, `st` the mean rank itself (compressed
+towards 0.5, the preference at the strength `gt` actually carries). Frozen `gt` at k 1, c7 / c10; placebo offsets on every third
+configuration (the real value on the same 1,001 is within 0.001 of the full family). `runs-agent/regear2/timing.json`, `pref.json`.
+
+Mean d Sharpe (c7; c10 is about 0.003 lower throughout):
+
+| set | real `gt`, full family [95 %] | circular shift, 20 offsets: mean (sd; min .. max; p95) | rank of real | real - shift mean [bootstrap 95 %] (range over offsets) | universes real > shift | within-day shuffle mean | timing / static / mechanics, c7 (c10) | `sr` [95 %] (share of real) | `st` [95 %] (share) |
+|---|---|---|---|---|---|---|---|---|---|
+| stored 30 (lead + R9-R24) | +0.143 [+0.029, +0.256] | +0.024 (0.028; -0.019 .. +0.091; +0.064) | 1 of 21 | +0.119 [+0.048, +0.196] (+0.053 .. +0.162) | 30/30 | +0.012 | 0.83 / 0.09 / 0.08 (0.85 / 0.09 / 0.06) | +0.063 [-0.029, +0.168] (0.44) | +0.019 [+0.003, +0.039] (0.13) |
+| lead 14 | +0.145 [+0.015, +0.264] | +0.033 (0.030; -0.022 .. +0.098; +0.072) | 1 of 21 | +0.112 [+0.035, +0.187] (+0.047 .. +0.167) | 14/14 | +0.015 | 0.77 / 0.13 / 0.10 (0.79 / 0.13 / 0.08) | +0.067 [-0.039, +0.173] (0.47) | +0.023 [+0.002, +0.046] (0.16) |
+| R9-R24 | +0.141 [+0.024, +0.263] | +0.016 (0.033; -0.040 .. +0.084; +0.074) | 1 of 21 | +0.126 [+0.044, +0.217] (+0.058 .. +0.182) | 16/16 | +0.009 | 0.89 / 0.05 / 0.06 (0.91 / 0.05 / 0.04) | +0.059 [-0.057, +0.178] (0.42) | +0.015 [-0.004, +0.037] (0.11) |
+| R41-R56 | +0.111 [-0.019, +0.242] | +0.010 (0.039; -0.053 .. +0.087; +0.077) | 1 of 21 | +0.102 [+0.011, +0.195] (+0.025 .. +0.165) | 16/16 | not run | 0.91 / - / - (0.93) | +0.060 [-0.063, +0.194] (0.55) | +0.021 [-0.000, +0.047] (0.19) |
+
+**Timing carries 0.83 of the gain, static preference 0.09** (and the form's mechanics 0.08) on the 30 stored universes at c7; 0.85 /
+0.09 / 0.06 at c10. On R41-R56 timing carries 0.91 / 0.93. The real value is above all 20 shifted placebos on every set, in every one
+of the 46 universes it is above that universe's shift mean, and real minus shift is separated from zero on every set.
+- The static arm at the strength `gt` carries (`st`) gives 0.13 of the gain (0.19 on R41-R56), in line with the shift estimate
+  (static + mechanics 0.17 / 0.09).
+- The static arm at full spread (`sr`) gives 0.44 of the gain on the stored universes and 0.55 on R41-R56: about half, not most; its
+  interval includes zero and real minus `sr` is not separated either (+0.080 [-0.052, +0.209]; R41-R56 +0.050 [-0.102, +0.199]). So a
+  pure static tilt on the forecaster's average preference would be a strategy of its own, weaker in Sharpe, and it is not what `gt`
+  does: only 2 % of the rank variance is between coins.
+
+The preference (45 forecast coins, daily rank among all of them, 2023-01 .. 2026-10): persistently up TRX 0.62, BNB 0.60, BTC 0.59, ETH 0.58, LTC 0.55, ATOM 0.55;
+down TFUEL 0.39, ZEC 0.42, ZEN 0.44, COMP 0.45, AAVE 0.45, ZRX 0.46 (mean rank fraction, 0.5 = neutral). It persists across halves of the window
+(rank correlation of the coin means 0.44). Across coins the mean rank correlates -0.67 with trailing 30-day volatility,
++0.44 with 30-day quote volume (size proxy) and +0.15 with trailing 30-day return: a preference for the calm, large coins. Day by
+day the rank correlates -0.19 with trailing volatility, -0.20 with the 30-day return (contrarian) and +0.02 with volume; its
+own autocorrelation is 0.21 at 1 day, 0.12 at 7, 0.04 at 30.
+
+Pooled risk measures, c7 (median paired difference against base; last column = median d CAGR minus pure gearing's at the same risk,
+from the wave 4f / 4g control paths, a derived figure):
+
+| set | arm | d CAGR | worst month | 21-day DD | 60-day DD | maxDD | vol ratio | turnover | ruin M11 (base 40.9) | CAGR against pure gearing at equal 60-day DD / maxDD / vol |
+|---|---|---|---|---|---|---|---|---|---|---|
+| stored 30 (lead + R9-R24) | real `gt` | -1.01 | -2.26 | -2.75 | -3.72 | -4.79 | 0.813 | -5.5 % | 23.9 | below the control grid at k 1 (wave 4f: +3.5 to +5.7 at k 1.10 - 1.30) |
+| | circular shift, mean [min, max] | -1.80 [-3.15, +0.34] | -1.03 [-1.17, -0.87] | -1.45 | -1.79 [-1.97, -1.47] | -2.28 [-2.85, -1.97] | 0.901 | -0.8 % | 32.0 [28.9, 35.5] | +1.0 / +0.3 / +0.5 |
+| | static `sr` | +0.68 | -0.70 | -1.11 | -1.44 | -1.90 | 0.945 | -1.4 % | 35.5 | +2.9 / +2.5 / +2.0 |
+| | static `st` | +0.24 | -0.14 | -0.18 | -0.23 | -0.46 | 0.987 | -0.3 % | 40.4 | +0.6 / +0.7 / +0.5 |
+| R41-R56 | real `gt` | -2.11 | -2.18 | -2.60 | -3.57 | -3.83 | 0.807 | -5.9 % |  | +3.1 / +1.6 / +2.3 |
+| | circular shift, mean [min, max] | -2.06 [-3.77, +0.55] | -0.96 [-1.18, -0.71] | -1.30 | -1.66 [-2.02, -1.30] | -2.03 [-2.46, -1.49] | 0.904 | -0.9 % |  | +0.4 / -0.2 / +0.1 |
+| | static `sr` | +0.36 | -0.63 | -1.20 | -1.37 | -1.67 | 0.941 | -1.5 % |  | +2.4 / +1.9 / +1.7 |
+| | static `st` | +0.22 | -0.14 | -0.20 | -0.26 | -0.50 | 0.983 | -0.4 % |  | +0.6 / +0.7 / +0.6 |
+
+- The shifted placebo keeps about half of the tilt's risk reduction (45 % of the worst-month cut, 48 % of the 60-day and max
+  drawdown cuts, 53 % of the volatility and ruin cuts) and costs more CAGR (-1.8 against -1.0). That half is the form cutting gross,
+  not information: at equal drawdown the placebo is worth +0.3 to +1.0 CAGR points on the stored universes and about zero on R41-R56,
+  against +1.6 to +3.1 for the real tilt on R41-R56 at k 1 and +3.5 to +5.7 on the stored universes at k 1.10 - 1.30 (wave 4f). So the
+  equal-drawdown value the gearing rests on is almost entirely the day-level timing.
+- The full-spread static arm `sr` is the exception worth noting: a small CAGR gain with lower drawdowns, +1.7 to +3.0 CAGR points at
+  equal risk on both sets, close to the real tilt's own figure on R41-R56. It is a low-volatility coin tilt in the tilt's form, not
+  the deployed arm, and its Sharpe gain is not separated from zero.
+- For the gearing: without timing the tilt at k 1 has 0.90 of base volatility, so by the pure-gearing ratios (1.08 at k 1.10, 1.16 at
+  1.20) a tilt whose timing had gone would sit near 0.97 of base volatility at k 1.10 and near 1.04 at k 1.20 (arithmetic from the
+  measured ratios, not a simulation): k 1.10 does not depend on the timing persisting, k 1.20 does.
