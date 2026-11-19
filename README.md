@@ -4,8 +4,7 @@ A fast probabilistic forecaster for crypto and stock returns: a compact quantile
 benchmark that scores it on unseen calendar folds and unseen assets against Timestral-209M, Chronos-2 and the classical
 baselines. Built for the forecasts behind [bitbank.nz](https://bitbank.nz).
 
-Status: private pre-release, nothing published. Code: Apache-2.0 (`LICENSE`, `NOTICE`). Two weight tiers with different rights
-(`models/README.md`): research (non-commercial) and permissive (synthetic data only).
+(`models/README.md`)
 
 ## What is here
 
@@ -39,9 +38,3 @@ Also here: `docs/RESEARCH_LOG.md` (every search trial), `docs/INTEGRATION.md` (c
 
 See `CONTRIBUTING.md` for the commands (tests, data fetch, baselines, training, scoring, Mojo build and self-test).
 
-## Data and third-party models
-
-Market data is fetched by the user from Binance Vision (`data.binance.vision`), CC BY-NC-SA 4.0, non-commercial; the result
-tables and `data/universe.json` are derived from it and carry the same licence and attribution. Not affiliated with or endorsed
-by Binance. Timestral-209M is Mistral AI's model (Modified MIT licence), Chronos-2 is Amazon's (Apache-2.0); neither is
-redistributed here. Nothing in this repository is investment advice.
