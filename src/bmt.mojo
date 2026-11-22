@@ -42,7 +42,12 @@ comptime O_CAL = 20
 comptime O_HEAD = 21
 comptime C_TOTAL = 22
 comptime C_SCRATCH = 23
-comptime NCFG = 24
+comptime P_EMB = 24        # packed (16-column panel) weights appended after the raw ones
+comptime P_LAYER = 25
+comptime P_HEAD = 26
+comptime C_TP = 27
+comptime NCFG = 28
+comptime W16 = SIMD[DType.float32, 16]
 
 
 @always_inline
@@ -123,14 +128,33 @@ def load_model(path: String, mut cfg: List[Int], mut w: List[Float32]) raises:
     var hin = D + (1 if cfg[C_COV] != 0 else 0)
     o += cfg[C_H] * NQ * hin + cfg[C_H] * NQ
     cfg[C_TOTAL] = o
-    cfg[C_SCRATCH] = T * F + 2 * T * D + T * 3 * D + T * D + T * 4 * D + T + 2 * D + 8 + cfg[C_H] * NQ
+    var tp = (T + 7) // 8 * 8
+    cfg[C_TP] = tp
+    cfg[C_SCRATCH] = T * F + 2 * T * D + T * 3 * D + T * D + T * 4 * D + tp + 2 * D + 8 + cfg[C_H] * NQ + D * tp + 16
+    var po = o
+    cfg[P_EMB] = po
+    po += packed_size(F, D)
+    cfg[P_LAYER] = po
+    po += cfg[C_NL] * 12 * D * D
+    cfg[P_HEAD] = po
+    po += packed_size(hin, cfg[C_H] * NQ)
     if len(bytes) != 64 + o * 4:
         raise Error(path + ": expected " + String(64 + o * 4) + " bytes, got " + String(len(bytes)))
-    w = List[Float32](length=o, fill=0)
+    w = List[Float32](length=po, fill=0)
     var src = bytes.unsafe_ptr().unsafe_bitcast[Float32]()
     var d = fp(w)
     for i in range(o):
         d[i] = src[16 + i]
+    pack_w(d + cfg[P_EMB], d + cfg[O_EMB], F, D)
+    var lsz = 12 * D * D + 13 * D
+    for l in range(cfg[C_NL]):
+        var lw = d + cfg[O_LAYER] + l * lsz
+        var pw = d + cfg[P_LAYER] + l * 12 * D * D
+        pack_w(pw, lw + 2 * D, D, 3 * D)
+        pack_w(pw + 3 * D * D, lw + 2 * D + 3 * D * D + 3 * D, D, D)
+        pack_w(pw + 4 * D * D, lw + 2 * D + 4 * D * D + 6 * D, D, 4 * D)
+        pack_w(pw + 8 * D * D, lw + 2 * D + 8 * D * D + 10 * D, 4 * D, D)
+    pack_w(d + cfg[P_HEAD], d + cfg[O_HEAD], hin, cfg[C_H] * NQ)
 
 
 @always_inline
@@ -148,62 +172,92 @@ def dot(a: FP, b: FP, n: Int) -> Float32:
     return (s0 + s1).reduce_add()
 
 
-def linear(dst: FP, src: FP, w: FP, b: FP, rows: Int, n_in: Int, n_out: Int, relu: Bool):
-    """dst[r, j] = b[j] + sum_k src[r, k] * w[j, k]; four rows share each pass over a weight row."""
-    var n8 = n_in - n_in % 8
-    var r = 0
-    while r + 4 <= rows:
-        var x0 = src + r * n_in
-        var x1 = x0 + n_in
-        var x2 = x1 + n_in
-        var x3 = x2 + n_in
-        var d0 = dst + r * n_out
-        for j in range(n_out):
-            var wj = w + j * n_in
-            var a0 = V(0)
-            var a1 = V(0)
-            var a2 = V(0)
-            var a3 = V(0)
-            var k = 0
-            while k < n8:
-                var wv = wj.unsafe_load[width=8](k)
-                a0 = wv.fma(x0.unsafe_load[width=8](k), a0)
-                a1 = wv.fma(x1.unsafe_load[width=8](k), a1)
-                a2 = wv.fma(x2.unsafe_load[width=8](k), a2)
-                a3 = wv.fma(x3.unsafe_load[width=8](k), a3)
-                k += 8
-            var y0 = a0.reduce_add() + b[j]
-            var y1 = a1.reduce_add() + b[j]
-            var y2 = a2.reduce_add() + b[j]
-            var y3 = a3.reduce_add() + b[j]
-            while k < n_in:
-                y0 += wj[k] * x0[k]
-                y1 += wj[k] * x1[k]
-                y2 += wj[k] * x2[k]
-                y3 += wj[k] * x3[k]
-                k += 1
-            if relu:
-                y0 = max(y0, 0)
-                y1 = max(y1, 0)
-                y2 = max(y2, 0)
-                y3 = max(y3, 0)
-            d0[j] = y0
-            d0[n_out + j] = y1
-            d0[2 * n_out + j] = y2
-            d0[3 * n_out + j] = y3
-        r += 4
-    while r < rows:
-        var x = src + r * n_in
-        var d = dst + r * n_out
-        for j in range(n_out):
-            var wj = w + j * n_in
-            var y = dot(wj, x, n8) + b[j]
-            var k = n8
-            while k < n_in:
-                y += wj[k] * x[k]
-                k += 1
-            d[j] = max(y, 0) if relu else y
-        r += 1
+@always_inline
+def tile[MR: Int](dst: FP, src: FP, wp: FP, bias: FP, r: Int, K: Int, n_out: Int, j0: Int, relu: Bool):
+    """dst[r..r+MR, j0..j0+16) = src rows @ panel + bias; one 16-wide weight row load feeds MR broadcast FMAs."""
+    var x0 = src + r * K
+    var a0 = W16(0)
+    var a1 = W16(0)
+    var a2 = W16(0)
+    var a3 = W16(0)
+    var a4 = W16(0)
+    var a5 = W16(0)
+    for k in range(K):
+        var wv = wp.unsafe_load[width=16](k * 16)
+        a0 = W16(x0[k]).fma(wv, a0)
+        comptime if MR > 1:
+            a1 = W16(x0[K + k]).fma(wv, a1)
+        comptime if MR > 2:
+            a2 = W16(x0[2 * K + k]).fma(wv, a2)
+        comptime if MR > 3:
+            a3 = W16(x0[3 * K + k]).fma(wv, a3)
+        comptime if MR > 4:
+            a4 = W16(x0[4 * K + k]).fma(wv, a4)
+        comptime if MR > 5:
+            a5 = W16(x0[5 * K + k]).fma(wv, a5)
+    var full = j0 + 16 <= n_out
+    var bv = W16(0)
+    if full:
+        bv = bias.unsafe_load[width=16](j0)
+    else:
+        for jj in range(n_out - j0):
+            bv[jj] = bias[j0 + jj]
+    var d = dst + r * n_out + j0
+    comptime for m in range(MR):
+        var y = a0
+        comptime if m == 1:
+            y = a1
+        comptime if m == 2:
+            y = a2
+        comptime if m == 3:
+            y = a3
+        comptime if m == 4:
+            y = a4
+        comptime if m == 5:
+            y = a5
+        y = y + bv
+        if relu:
+            y = max(y, W16(0))
+        if full:
+            d.store(m * n_out, y)
+        else:
+            for jj in range(n_out - j0):
+                d[m * n_out + jj] = y[jj]
+
+
+def linear(dst: FP, src: FP, wp: FP, b: FP, rows: Int, n_in: Int, n_out: Int, relu: Bool):
+    """dst[r, j] = b[j] + sum_k src[r, k] * w[j, k], w packed by pack_w: panel-major, k-major inside, 16 columns."""
+    for p in range((n_out + 15) // 16):
+        var wpp = wp + p * n_in * 16
+        var j0 = p * 16
+        var r = 0
+        while r + 6 <= rows:
+            tile[6](dst, src, wpp, b, r, n_in, n_out, j0, relu)
+            r += 6
+        var rem = rows - r
+        if rem == 5:
+            tile[5](dst, src, wpp, b, r, n_in, n_out, j0, relu)
+        elif rem == 4:
+            tile[4](dst, src, wpp, b, r, n_in, n_out, j0, relu)
+        elif rem == 3:
+            tile[3](dst, src, wpp, b, r, n_in, n_out, j0, relu)
+        elif rem == 2:
+            tile[2](dst, src, wpp, b, r, n_in, n_out, j0, relu)
+        elif rem == 1:
+            tile[1](dst, src, wpp, b, r, n_in, n_out, j0, relu)
+
+
+def packed_size(n_in: Int, n_out: Int) -> Int:
+    return ((n_out + 15) // 16) * 16 * n_in
+
+
+def pack_w(dst: FP, w: FP, n_in: Int, n_out: Int):
+    """w[n_out, n_in] row-major -> dst[panel][k][16], zero beyond n_out."""
+    for p in range((n_out + 15) // 16):
+        for k in range(n_in):
+            for jj in range(16):
+                var j = p * 16 + jj
+                dst[(p * n_in + k) * 16 + jj] = w[j * n_in + k] if j < n_out else Float32(0)
 
 
 def layernorm(dst: FP, src: FP, g: FP, b: FP, rows: Int, D: Int):
@@ -224,28 +278,43 @@ def layernorm(dst: FP, src: FP, g: FP, b: FP, rows: Int, D: Int):
             y.store(i, ((x.unsafe_load[width=8](i) - mv) * inv).fma(g.unsafe_load[width=8](i), b.unsafe_load[width=8](i)))
 
 
-def attention(dst: FP, qkv: FP, sc: FP, T: Int, D: Int, NH: Int, first: Int):
-    """softmax(q k^T / sqrt(hd)) v per head for query tokens first..T-1; qkv[t] = [q | k | v], each D wide."""
+def attention(dst: FP, qkv: FP, kt: FP, sc: FP, T: Int, Tp: Int, D: Int, NH: Int, first: Int):
+    """softmax(q k^T / sqrt(hd)) v per head for query tokens first..T-1; qkv[t] = [q | k | v], each D wide. Scores are computed 8 keys
+    at a time from a per-head transposed copy of k (kt[hd, Tp], zero padded)."""
     var hd = D // NH
     var inv = Float32(1.0) / sqrt(Float32(hd))
     for h in range(NH):
+        for j in range(T):
+            var kj = qkv + j * 3 * D + D + h * hd
+            for d in range(hd):
+                kt[d * Tp + j] = kj[d] * inv
+        for j in range(T, Tp):
+            for d in range(hd):
+                kt[d * Tp + j] = 0
         for i in range(first, T):
             var qi = qkv + i * 3 * D + h * hd
-            var mx = Float32(-1e30)
-            for j in range(T):
-                var s = dot(qi, qkv + j * 3 * D + D + h * hd, hd) * inv
-                sc[j] = s
-                mx = max(mx, s)
-            var tot = Float32(0)
-            for j in range(T):
-                var e = exp(sc[j] - mx)
-                sc[j] = e
-                tot += e
+            var mxv = V(-1e30)
+            for jb in range(0, Tp, 8):
+                var acc = V(0)
+                for d in range(hd):
+                    acc = V(qi[d]).fma(kt.unsafe_load[width=8](d * Tp + jb), acc)
+                sc.store(jb, acc)
+            for j in range(T, Tp):
+                sc[j] = -1e30
+            for jb in range(0, Tp, 8):
+                mxv = max(mxv, sc.unsafe_load[width=8](jb))
+            var mx = mxv.reduce_max()
+            var tv = V(0)
+            for jb in range(0, Tp, 8):
+                var e = exp(sc.unsafe_load[width=8](jb) - V(mx))
+                sc.store(jb, e)
+                tv += e
+            var it = Float32(1) / tv.reduce_add()
             var o = dst + i * D + h * hd
             for k in range(0, hd, 8):
                 o.store(k, V(0))
             for j in range(T):
-                var p = V(sc[j] / tot)
+                var p = V(sc[j] * it)
                 var vj = qkv + j * 3 * D + 2 * D + h * hd
                 for k in range(0, hd, 8):
                     o.store(k, p.fma(vj.unsafe_load[width=8](k), o.unsafe_load[width=8](k)))
@@ -256,6 +325,14 @@ def softplus(x: Float32) -> Float32:
     return max(x, 0) + log1p(exp(-abs(x)))
 
 
+@always_inline
+def vasinh(x: V) -> V:
+    var a = abs(x)
+    var y = log1p(a + a * a / (V(1) + sqrt(a * a + V(1))))
+    return x.lt(V(0)).select(-y, y)
+
+
+@always_inline
 def forward_row(c: IP, w: FP, r: FP, bm: FP, cal: FP, res: FP, s: FP):
     """one series -> out[H * 21]. s = scratch of cfg[C_SCRATCH] floats."""
     var L = c[C_L]
@@ -275,8 +352,10 @@ def forward_row(c: IP, w: FP, r: FP, bm: FP, cal: FP, res: FP, s: FP):
     var att = qkv + T * 3 * D
     var u = att + T * D
     var scb = u + T * 4 * D
-    var z = scb + T
+    var Tp = c[C_TP]
+    var z = scb + Tp
     var o = z + 2 * D + 8
+    var kt = o + H * NQ
     # scale + features
     var acc = V(0)
     for i in range(0, L, 8):
@@ -290,22 +369,29 @@ def forward_row(c: IP, w: FP, r: FP, bm: FP, cal: FP, res: FP, s: FP):
             var v = bm.unsafe_load[width=8](i)
             accb = v.fma(v, accb)
         sb = max(sqrt(accb.reduce_add() / Float32(L)), Float32(1e-8))
-    for i in range(L):
-        var xv = asinh(r[i] / sc)
-        feat[i * nf] = xv
-        feat[i * nf + 1] = xv * xv
+    var gs = V(Float32(1) / sc)
+    var gb = V(Float32(1) / sb)
+    for i in range(0, L, 8):
+        var xv = vasinh(r.unsafe_load[width=8](i) * gs)
+        var xb = V(0)
         if cov:
-            var xb = asinh(bm[i] / sb)
-            feat[i * nf + 2] = xb
-            feat[i * nf + 3] = xb * xb
-            feat[i * nf + 4] = xv * xb
-    linear(x, feat, w + c[O_EMB], w + c[O_EMB] + D * F, T, F, D, False)
+            xb = vasinh(bm.unsafe_load[width=8](i) * gb)
+        for u_ in range(8):
+            var k = (i + u_) * nf
+            feat[k] = xv[u_]
+            feat[k + 1] = xv[u_] * xv[u_]
+            if cov:
+                feat[k + 2] = xb[u_]
+                feat[k + 3] = xb[u_] * xb[u_]
+                feat[k + 4] = xv[u_] * xb[u_]
+    linear(x, feat, w + c[P_EMB], w + c[O_EMB] + D * F, T, F, D, False)
     var pos = w + c[O_POS]
     for i in range(0, T * D, 8):
         x.store(i, x.unsafe_load[width=8](i) + pos.unsafe_load[width=8](i))
     var lsz = 12 * D * D + 13 * D
     for l in range(NL):
         var lw = w + c[O_LAYER] + l * lsz
+        var pw = w + c[P_LAYER] + l * 12 * D * D
         var n1 = lw
         var wq = n1 + 2 * D
         var bq = wq + 3 * D * D
@@ -319,14 +405,14 @@ def forward_row(c: IP, w: FP, r: FP, bm: FP, cal: FP, res: FP, s: FP):
         var first = T - 1 if l == NL - 1 else 0                      # the head reads only the last token
         var nr = T - first
         layernorm(hb, x, n1, n1 + D, T, D)
-        linear(qkv, hb, wq, bq, T, D, 3 * D, False)
-        attention(att, qkv, scb, T, D, NH, first)
-        linear(hb + first * D, att + first * D, wo, bo, nr, D, D, False)
+        linear(qkv, hb, pw, bq, T, D, 3 * D, False)
+        attention(att, qkv, kt, scb, T, Tp, D, NH, first)
+        linear(hb + first * D, att + first * D, pw + 3 * D * D, bo, nr, D, D, False)
         for i in range(first * D, T * D, 8):
             x.store(i, x.unsafe_load[width=8](i) + hb.unsafe_load[width=8](i))
         layernorm(hb + first * D, x + first * D, n2, n2 + D, nr, D)
-        linear(u + first * 4 * D, hb + first * D, w1, b1, nr, D, 4 * D, True)
-        linear(hb + first * D, u + first * 4 * D, w2, b2, nr, 4 * D, D, False)
+        linear(u + first * 4 * D, hb + first * D, pw + 4 * D * D, b1, nr, D, 4 * D, True)
+        linear(hb + first * D, u + first * 4 * D, pw + 8 * D * D, b2, nr, 4 * D, D, False)
         for i in range(first * D, T * D, 8):
             x.store(i, x.unsafe_load[width=8](i) + hb.unsafe_load[width=8](i))
     layernorm(z, x + (T - 1) * D, w + c[O_NF], w + c[O_NF] + D, 1, D)
@@ -340,7 +426,7 @@ def forward_row(c: IP, w: FP, r: FP, bm: FP, cal: FP, res: FP, s: FP):
     if cov:
         z[D] = min(max(log(sc / sb), Float32(-5)), Float32(5))
         hin = D + 1
-    linear(o, z, w + c[O_HEAD], w + c[O_HEAD] + H * NQ * hin, 1, hin, H * NQ, False)
+    linear(o, z, w + c[P_HEAD], w + c[O_HEAD] + H * NQ * hin, 1, hin, H * NQ, False)
     for h in range(H):
         var oh = o + h * NQ
         var qo = res + h * NQ

@@ -1,0 +1,5 @@
+# q1: 4-seed ensemble, 4 forwards per row (the efficient point: same test score as q2)
+../weights/bmt2-syn-ohlc+cal@t-ens4/s0/bmt2.bin
+../weights/bmt2-syn-ohlc+cal@t-ens4/s1/bmt2.bin
+../weights/bmt2-syn-ohlc+cal@t-ens4/s2/bmt2.bin
+../weights/bmt2-syn-ohlc+cal@t-ens4/s3/bmt2.bin

@@ -1,0 +1,6 @@
+# q2: 4-seed ensemble, flip-averaged, 8 forwards per row (max; adds nothing measurable over q1 so far)
+sym
+../weights/bmt2-ohlc+cal@t-ens4/s0/bmt2.bin
+../weights/bmt2-ohlc+cal@t-ens4/s1/bmt2.bin
+../weights/bmt2-ohlc+cal@t-ens4/s2/bmt2.bin
+../weights/bmt2-ohlc+cal@t-ens4/s3/bmt2.bin

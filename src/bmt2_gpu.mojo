@@ -1,6 +1,7 @@
 """GPU inference for bmt2 (configurable inputs): fp32 GEMMs + fused kernels, same arithmetic as src/bmt2.mojo / train/model2.py.
 
   bmt2_gpu selftest <dir> | bench <bmt2.bin> <batch> <iters> | serve <bmt2.bin> [capacity]
+  bench / serve take a comma-separated list of weight files (a seed ensemble of one build, quantile-averaged).
 
 Dimensions are compile-time defines (tools/gpu_defs.py prints them for a weight file): D, NL, NH, NFC, NCC, FF, FC, NS, HAR, CAL.
 One build per model configuration and GPU arch. BMT_SYM=1 selects the flip-averaged (2-pass) forecast.
@@ -10,7 +11,7 @@ from std.math import sqrt, exp, log, log1p, ceildiv
 from std.sys import argv, stderr, get_defined_int
 from std.os import getenv
 from std.ffi import external_call
-from std.memory import stack_allocation
+from std.memory import stack_allocation, unsafe_memcpy
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from max.gpu import thread_idx, block_idx, block_dim, barrier
@@ -157,12 +158,42 @@ def softplus(x: Float32) -> Float32:
     return max(x, Float32(0)) + log1p(exp(-abs(x)))
 
 
+def expand_spec(spec: String, mut sym: Bool) raises -> String:
+    """A weight spec is a comma-separated list of bmt2.bin files, or @level.txt: whitespace-separated member files (relative to the
+    level file) and the optional token `sym` (flip averaging). Returns the comma-separated member list."""
+    if not spec.startswith("@"):
+        return spec
+    var path = String(spec[byte=1:])
+    var dir = String("")
+    var cut = -1
+    for i in range(path.byte_length()):
+        if path[byte=i] == "/":
+            cut = i
+    if cut >= 0:
+        dir = String(path[byte=:cut + 1])
+    var txt = open(path, "r").read()
+    var out = String("")
+    for line in txt.splitlines():
+        var l = String(line.strip())
+        if l.byte_length() == 0 or l.startswith("#"):
+            continue
+        for tok in l.split():
+            var t = String(tok)
+            if t == "sym":
+                sym = True
+            else:
+                if out.byte_length() > 0:
+                    out += ","
+                out += t if t.startswith("/") else dir + t
+    return out
+
+
 struct Engine(Movable):
     var cap: Int
+    var nm: Int
+    var sym: Bool
     var w: BufF
-    var xf: BufF
-    var xc: BufF
-    var xs: BufF
+    var xin: BufF
     var sc: BufF
     var feat: BufF
     var featc: BufF
@@ -173,7 +204,12 @@ struct Engine(Movable):
     var qkv: BufF
     var att: BufF
     var u: BufF
+    var xl: BufF
+    var al: BufF
+    var hl: BufF
+    var ul: BufF
     var res: BufF
+    var fin: BufF
     var hin: HostBuffer[F32]
     var hout: HostBuffer[F32]
     var kf: Int64
@@ -183,7 +219,12 @@ struct Engine(Movable):
     var k2: Float32
     var k3: Float32
 
-    def __init__(out self, ctx: DeviceContext, path: String, cap: Int) raises:
+    def __init__(out self, ctx: DeviceContext, spec: String, cap_rows: Int) raises:
+        var sy = getenv("BMT_SYM", "0") == "1"
+        var paths = expand_spec(spec, sy).split(",")
+        self.sym = sy
+        self.nm = len(paths)
+        var path = String(paths[0])
         var f = open(path, "r")
         var bytes = f.read_bytes()
         var hp = bytes.unsafe_ptr().unsafe_bitcast[Int32]()
@@ -209,18 +250,27 @@ struct Engine(Movable):
         self.k1 = sqrt(Float32(Int(hp[15])))
         self.k2 = sqrt(Float32(Int(hp[16])))
         self.k3 = sqrt(Float32(Int(hp[17])))
-        var src = bytes.unsafe_ptr().unsafe_bitcast[Float32]()
-        var hbuf = ctx.enqueue_create_host_buffer[F32](NW)
-        for i in range(NW):
-            hbuf[i] = src[64 + i]
-        self.w = ctx.enqueue_create_buffer[F32](NW)
+        var hbuf = ctx.enqueue_create_host_buffer[F32](NW * self.nm)
+        ctx.synchronize()
+        for m in range(self.nm):                                      # seed-ensemble members: same build, same header
+            var fm = open(String(paths[m]), "r")
+            var bm = fm.read_bytes()
+            var hm = bm.unsafe_ptr().unsafe_bitcast[Int32]()
+            if len(bm) != len(bytes):
+                raise Error(String(paths[m]) + ": ensemble member does not match this build")
+            for i in range(64):
+                if Int(hm[i]) != Int(hp[i]):
+                    raise Error(String(paths[m]) + ": ensemble member header differs")
+            var src = bm.unsafe_ptr().unsafe_bitcast[Float32]()
+            for i in range(NW):
+                hbuf[m * NW + i] = src[64 + i]
+        self.w = ctx.enqueue_create_buffer[F32](NW * self.nm)
         ctx.enqueue_copy(self.w, hbuf)
         ctx.synchronize()
+        var cap = max(cap_rows, 2)                                    # >= 2: a flip-averaged slice holds a row and its mirror
         self.cap = cap
         var M = cap * T
-        self.xf = ctx.enqueue_create_buffer[F32](cap * NFC * L)
-        self.xc = ctx.enqueue_create_buffer[F32](cap * NCS * LC)
-        self.xs = ctx.enqueue_create_buffer[F32](cap * (NSS + 3))
+        self.xin = ctx.enqueue_create_buffer[F32](cap * ROWIN)
         self.sc = ctx.enqueue_create_buffer[F32](cap)
         self.feat = ctx.enqueue_create_buffer[F32](cap * L * FF)
         self.featc = ctx.enqueue_create_buffer[F32](cap * LC * FC)
@@ -231,7 +281,12 @@ struct Engine(Movable):
         self.qkv = ctx.enqueue_create_buffer[F32](M * 3 * D)
         self.att = ctx.enqueue_create_buffer[F32](M * D)
         self.u = ctx.enqueue_create_buffer[F32](M * 4 * D)
+        self.xl = ctx.enqueue_create_buffer[F32](cap * D)
+        self.al = ctx.enqueue_create_buffer[F32](cap * D)
+        self.hl = ctx.enqueue_create_buffer[F32](cap * D)
+        self.ul = ctx.enqueue_create_buffer[F32](cap * 4 * D)
         self.res = ctx.enqueue_create_buffer[F32](cap * HQ)
+        self.fin = ctx.enqueue_create_buffer[F32](cap * HQ)
         self.hin = ctx.enqueue_create_host_buffer[F32](cap * ROWIN)
         self.hout = ctx.enqueue_create_host_buffer[F32](cap * HQ)
 
@@ -244,73 +299,81 @@ def asinh_(x: Float32) -> Float32:
     return y if x >= 0 else -y
 
 
-def k_norm[NCH: Int, TT: Int, FT: Int](ctx: DeviceContext, px: FP, pf: FP, ps: FP, kinds: Int64, n: Int, write_s: Bool) raises:
-    """Per row: raw channels x[NCH, TT] -> features [TT, FT] (kinds: 4 bits per channel); optionally stores the scale of channel 0."""
-    var n64 = Int64(n)
+def k_norm[NCH: Int, TT: Int, FT: Int](ctx: DeviceContext, px: FP, pf: FP, ps: FP, kinds: Int64, nr: Int, cnt: Int, write_s: Bool) raises:
+    """Per row r < nr (one block of 128 threads): raw channels of input row r % cnt, x[NCH, TT] -> features [TT, FT] (kinds: 4 bits per
+    channel), mirrored when r >= cnt (RET / XRT / RAW change sign, SHR -> 1 - x); optionally stores the scale of channel 0."""
+    comptime NT = 128
+    var c64 = Int64(cnt)
     var ws = write_s
 
-    def k() {var px, var pf, var ps, var kinds, var n64, var ws}:
-        var r = Int(block_idx.x * block_dim.x + thread_idx.x)
-        if r >= Int(n64):
-            return
-        var x = px + r * (NCH * TT)
+    def k() {var px, var pf, var ps, var kinds, var c64, var ws}:
+        var r = Int(block_idx.x)
+        var t = Int(thread_idx.x)
+        var sg: Float32 = -1 if r >= Int(c64) else 1
+        var x = px + (r % Int(c64)) * (NCH * TT)
         var f = pf + r * (TT * FT)
-        var acc: Float32 = 0
-        for i in range(TT):
-            acc += x[i] * x[i]
-        var s = max(sqrt(acc / Float32(TT)), Float32(1e-8))
-        if ws:
+        var sh = stack_allocation[NT, Float32, address_space=AddressSpace.SHARED]()
+        var st = stack_allocation[NCH, Float32, address_space=AddressSpace.SHARED]()
+        for c in range(NCH):
+            var kd = 0 if c == 0 else Int((kinds >> Int64(4 * c)) & 15)
+            if c == 0 or kd == 2 or kd == 4:                          # block-uniform branch: RMS (RET, XRT) or mean (VOL) of the channel
+                var acc: Float32 = 0
+                for i in range(t, TT, NT):
+                    var v = x[c * TT + i]
+                    acc += v if kd == 2 else v * v
+                sh[t] = acc
+                barrier()
+                var h = NT // 2
+                while h > 0:
+                    if t < h:
+                        sh[t] = sh[t] + sh[t + h]
+                    barrier()
+                    h = h // 2
+                if t == 0:
+                    st[c] = max(sh[0] / Float32(TT), Float32(1e-12)) if kd == 2 else max(sqrt(sh[0] / Float32(TT)), Float32(1e-8))
+                barrier()
+        var s = st[0]
+        if ws and t == 0:
             ps[r] = s
-        for i in range(TT):
-            var xr = asinh_(x[i] / s)
+        var g = sg / s
+        for i in range(t, TT, NT):
+            var xr = asinh_(x[i] * g)
             f[i * FT] = xr
             f[i * FT + 1] = xr * xr
-        var o = 2
-        for c in range(1, NCH):
-            var v = x + c * TT
-            var kd = Int((kinds >> Int64(4 * c)) & 15)
-            if kd == 1:
-                for i in range(TT):
-                    f[i * FT + o] = asinh_(v[i] / s)
-            elif kd == 2:
-                var m: Float32 = 0
-                for i in range(TT):
-                    m += v[i]
-                m = max(m / Float32(TT), Float32(1e-12))
-                for i in range(TT):
-                    f[i * FT + o] = log1p(v[i] / m)
-            elif kd == 3:
-                for i in range(TT):
-                    f[i * FT + o] = (v[i] - 0.5) * 4
-            elif kd == 4:
-                var a2: Float32 = 0
-                for i in range(TT):
-                    a2 += v[i] * v[i]
-                var sj = max(sqrt(a2 / Float32(TT)), Float32(1e-8))
-                for i in range(TT):
-                    var xb = asinh_(v[i] / sj)
+            var o = 2
+            for c in range(1, NCH):
+                var v = x[c * TT + i]
+                var kd = Int((kinds >> Int64(4 * c)) & 15)
+                if kd == 1:
+                    f[i * FT + o] = asinh_(v / s)
+                elif kd == 2:
+                    f[i * FT + o] = log1p(v / st[c])
+                elif kd == 3:
+                    var shr = v if sg > 0 else Float32(1) - v
+                    f[i * FT + o] = (shr - 0.5) * 4
+                elif kd == 4:
+                    var xb = asinh_(v * sg / st[c])
                     f[i * FT + o] = xb
-                    f[i * FT + o + 1] = xb * f[i * FT]
+                    f[i * FT + o + 1] = xb * xr
+                    o += 1
+                else:
+                    f[i * FT + o] = sg * v
                 o += 1
-            else:
-                for i in range(TT):
-                    f[i * FT + o] = v[i]
-            o += 1
 
-    ctx.enqueue_function(k, grid_dim=ceildiv(n, 64), block_dim=64)
+    ctx.enqueue_function(k, grid_dim=nr, block_dim=NT)
 
 
-def k_assemble(ctx: DeviceContext, e: Engine, n: Int) raises:
+def k_assemble(ctx: DeviceContext, e: Engine, pxs: FP, n: Int, cnt: Int, mem: Int) raises:
     """Token sequence per row: [scalar token][coarse tokens][fine tokens] + embedding bias + position."""
     var px = mpf(e.x)
     var pe = mpf(e.ef)
     var pc = mpf(e.ec)
-    var pxs = mpf(e.xs)
     var ps = mpf(e.sc)
-    var w = mpf(e.w)
+    var w = mpf(e.w) + mem * NW
     var tot64 = Int64(n * T * D)
+    var c64 = Int64(cnt)
 
-    def k() {var px, var pe, var pc, var pxs, var ps, var w, var tot64}:
+    def k() {var px, var pe, var pc, var pxs, var ps, var w, var tot64, var c64}:
         var i = Int(block_idx.x * block_dim.x + thread_idx.x)
         if i >= Int(tot64):
             return
@@ -324,7 +387,7 @@ def k_assemble(ctx: DeviceContext, e: Engine, n: Int) raises:
             v = pc[(r * TC + tok - TS) * D + d] + w[O_EMBC + D * PC * FC + d]
         else:
             v = w[O_EMBS + D * NS + d]
-            var sr = pxs + r * (NSS + 3)
+            var sr = pxs + (r % Int(c64)) * NS
             for j in range(NS):
                 var sv = sr[j]
                 if j < HAR:
@@ -335,10 +398,11 @@ def k_assemble(ctx: DeviceContext, e: Engine, n: Int) raises:
     ctx.enqueue_function(k, grid_dim=ceildiv(n * T * D, 256), block_dim=256)
 
 
-def k_attn(ctx: DeviceContext, e: Engine, bq: FP, n: Int) raises:
-    """One block per (row, head), one thread per query token; k and v of the block live in shared memory."""
+def k_attn[LAST: Bool](ctx: DeviceContext, e: Engine, bq: FP, n: Int) raises:
+    """One block per (row, head), one thread per query token; k and v of the block live in shared memory. LAST: only the last query,
+    written compactly to al[row, D]."""
     var pq = mpf(e.qkv)
-    var po = mpf(e.att)
+    var po = mpf(e.al) if LAST else mpf(e.att)
 
     def k() {var pq, var po, var bq}:
         var h = Int(block_idx.x) % NH
@@ -355,6 +419,9 @@ def k_attn(ctx: DeviceContext, e: Engine, bq: FP, n: Int) raises:
             ks[t * HD + d] = row[D + d] + bb[D + d]
             vs[t * HD + d] = row[2 * D + d] + bb[2 * D + d]
         barrier()
+        comptime if LAST:
+            if t != T - 1:
+                return
         var inv = Float32(1.0) / sqrt(Float32(HD))
         var mx: Float32 = -3.0e38
         for j in range(T):
@@ -370,7 +437,7 @@ def k_attn(ctx: DeviceContext, e: Engine, bq: FP, n: Int) raises:
             sm[j] = ev
             tot += ev
         var it = Float32(1.0) / tot
-        var o = po + (b * T + t) * D + h * HD
+        var o = po + (b * D + h * HD if LAST else (b * T + t) * D + h * HD)
         for d in range(HD):
             var a: Float32 = 0
             for j in range(T):
@@ -380,24 +447,25 @@ def k_attn(ctx: DeviceContext, e: Engine, bq: FP, n: Int) raises:
     ctx.enqueue_function(k, grid_dim=n * NH, block_dim=T)
 
 
-def k_head(ctx: DeviceContext, e: Engine, n: Int) raises:
+def k_head(ctx: DeviceContext, e: Engine, pcal: FP, n: Int, cnt: Int, mem: Int) raises:
     """Per row: final LayerNorm of the last token (+ calendar embeddings), head, monotone quantiles, scale back."""
-    var px = mpf(e.x)
+    var px = mpf(e.xl)
     var ps = mpf(e.sc)
     var po = mpf(e.res)
-    var pxs = mpf(e.xs)
-    var w = mpf(e.w)
+    var pxs = pcal
+    var w = mpf(e.w) + mem * NW
     var n64 = Int64(n)
+    var c64 = Int64(cnt)
     var k0 = e.k0
     var k1 = e.k1
     var k2 = e.k2
     var k3 = e.k3
 
-    def k() {var px, var ps, var po, var pxs, var w, var n64, var k0, var k1, var k2, var k3}:
+    def k() {var px, var ps, var po, var pxs, var w, var n64, var c64, var k0, var k1, var k2, var k3}:
         var r = Int(block_idx.x * block_dim.x + thread_idx.x)
         if r >= Int(n64):
             return
-        var x = px + (r * T + T - 1) * D
+        var x = px + r * D
         var pn = w + O_NF
         var ph = w + O_HEAD
         var z = stack_allocation[D, Float32]()
@@ -414,7 +482,7 @@ def k_head(ctx: DeviceContext, e: Engine, n: Int) raises:
         for i in range(D):
             z[i] = (x[i] - mean) * inv * pn[i] + pn[D + i]
         comptime if CAL > 0:
-            var cr = pxs + r * (NSS + 3) + NSS
+            var cr = pxs + (r % Int(c64)) * 3
             var e0 = w + O_CAL + Int(cr[0]) * D
             var e1 = w + O_CAL + (24 + Int(cr[1])) * D
             var e2 = w + O_CAL + (31 + Int(cr[2])) * D
@@ -451,20 +519,65 @@ def k_head(ctx: DeviceContext, e: Engine, n: Int) raises:
     ctx.enqueue_function(k, grid_dim=ceildiv(n, 64), block_dim=64)
 
 
-def forward(ctx: DeviceContext, e: Engine, n: Int) raises:
+def k_last(ctx: DeviceContext, e: Engine, n: Int) raises:
+    """xl[r] = x[r, T - 1]."""
+    var px = mpf(e.x)
+    var pl = mpf(e.xl)
+    var tot64 = Int64(n * D)
+
+    def k() {var px, var pl, var tot64}:
+        var i = Int(block_idx.x * block_dim.x + thread_idx.x)
+        if i < Int(tot64):
+            pl[i] = px[((i // D) * T + T - 1) * D + i % D]
+
+    ctx.enqueue_function(k, grid_dim=ceildiv(n * D, 256), block_dim=256)
+
+
+def k_out(ctx: DeviceContext, e: Engine, cnt: Int, sym: Bool, alpha: Float32, acc: Bool) raises:
+    """fin[r] (=, or += with acc) alpha * forecast of row r: res[r], or (res[r] - mirror(res[r + cnt])) / 2 when flip-averaged."""
+    var pr = mpf(e.res)
+    var pf = mpf(e.fin)
+    var tot64 = Int64(cnt * HQ)
+    var c64 = Int64(cnt)
+    var sy = sym
+    var ac = acc
+    var al = alpha
+
+    def k() {var pr, var pf, var tot64, var c64, var sy, var ac, var al}:
+        var i = Int(block_idx.x * block_dim.x + thread_idx.x)
+        if i < Int(tot64):
+            var v = pr[i]
+            if sy:
+                var r = i // HQ
+                var hj = i % HQ
+                var j = hj % NQ
+                v = 0.5 * (v - pr[(r + Int(c64)) * HQ + hj - j + NQ - 1 - j])
+            v = v * al
+            pf[i] = pf[i] + v if ac else v
+
+    ctx.enqueue_function(k, grid_dim=ceildiv(cnt * HQ, 256), block_dim=256)
+
+
+def forward(ctx: DeviceContext, e: Engine, n: Int, cnt: Int, mem: Int) raises:
+    """n rows on the device (n = cnt, or 2 cnt with the mirrored copies of the cnt input rows) -> e.res[n, HQ]."""
+    comptime assert NL >= 1
     var M = n * T
-    var w = mpf(e.w)
+    var w = mpf(e.w) + mem * NW
     var x = mpf(e.x)
     var hb = mpf(e.hb)
     var qkv = mpf(e.qkv)
     var att = mpf(e.att)
     var u = mpf(e.u)
-    k_norm[NFC, L, FF](ctx, mpf(e.xf), mpf(e.feat), mpf(e.sc), e.kf, n, True)
+    var xin = mpf(e.xin)
+    var pco = xin + cnt * NFC * L
+    var psc = pco + cnt * NCC * LC
+    var pca = psc + cnt * NS
+    k_norm[NFC, L, FF](ctx, xin, mpf(e.feat), mpf(e.sc), e.kf, n, cnt, True)
     gemm[D, P * FF](ctx, mpf(e.ef), mpf(e.feat), w + O_EMB, n * TF)
     comptime if NCC > 0:
-        k_norm[NCC, LC, FC](ctx, mpf(e.xc), mpf(e.featc), mpf(e.sc), e.kc, n, False)
+        k_norm[NCC, LC, FC](ctx, pco, mpf(e.featc), mpf(e.sc), e.kc, n, cnt, False)
         gemm[D, PC * FC](ctx, mpf(e.ec), mpf(e.featc), w + O_EMBC, n * TC)
-    k_assemble(ctx, e, n)
+    k_assemble(ctx, e, psc, n, cnt, mem)
     for l in range(NL):
         var lw = w + (O_LAYER + l * LSZ)
         var wq = lw + 2 * D
@@ -478,15 +591,30 @@ def forward(ctx: DeviceContext, e: Engine, n: Int) raises:
         var b2 = w2 + 4 * D * D
         k_ln(ctx, hb, x, lw, M)
         gemm[3 * D, D](ctx, qkv, hb, wq, M)
-        k_attn(ctx, e, bq, n)
-        gemm[D, D](ctx, hb, att, wo, M)
-        k_resid(ctx, x, hb, bo, M)
-        k_ln(ctx, hb, x, n2, M)
-        gemm[4 * D, D](ctx, u, hb, w1, M)
-        k_bias_relu(ctx, u, b1, M)
-        gemm[D, 4 * D](ctx, hb, u, w2, M)
-        k_resid(ctx, x, hb, b2, M)
-    k_head(ctx, e, n)
+        if l < NL - 1:
+            k_attn[False](ctx, e, bq, n)
+            gemm[D, D](ctx, hb, att, wo, M)
+            k_resid(ctx, x, hb, bo, M)
+            k_ln(ctx, hb, x, n2, M)
+            gemm[4 * D, D](ctx, u, hb, w1, M)
+            k_bias_relu(ctx, u, b1, M)
+            gemm[D, 4 * D](ctx, hb, u, w2, M)
+            k_resid(ctx, x, hb, b2, M)
+        else:                                                         # last layer: only the last token feeds the head
+            var xl = mpf(e.xl)
+            var al = mpf(e.al)
+            var hl = mpf(e.hl)
+            var ul = mpf(e.ul)
+            k_attn[True](ctx, e, bq, n)
+            k_last(ctx, e, n)
+            gemm[D, D](ctx, hl, al, wo, n)
+            k_resid(ctx, xl, hl, bo, n)
+            k_ln(ctx, hl, xl, n2, n)
+            gemm[4 * D, D](ctx, ul, hl, w1, n)
+            k_bias_relu(ctx, ul, b1, n)
+            gemm[D, 4 * D](ctx, hl, ul, w2, n)
+            k_resid(ctx, xl, hl, b2, n)
+    k_head(ctx, e, pca, n, cnt, mem)
 
 
 @always_inline
@@ -494,75 +622,48 @@ def lp(l: List[Float32]) -> FP:
     return l.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
 
 
-def infer(ctx: DeviceContext, e: Engine, inp: FP, res: FP, n: Int) raises:
-    """Host block (fine | coarse | scal | cal, each for all n rows) -> host quantiles, in slices of the engine capacity."""
+def per_slice(e: Engine, sym: Bool) -> Int:
+    return e.cap // 2 if sym else e.cap
+
+
+def infer(ctx: DeviceContext, e: Engine, inp: FP, res: FP, n: Int, sym: Bool, staged: Bool = False) raises:
+    """Host block (fine | coarse | scal | cal, each for all n rows) -> host quantiles, in slices of the engine capacity (half of it with
+    sym: the mirrored rows are derived on the device). One upload, one download and one synchronisation per slice. staged: the block
+    is already in the pinned upload buffer (n <= per_slice), so the host copy is skipped."""
     var pc = inp + n * NFC * L
     var ps = pc + n * NCC * LC
     var pk = ps + n * NS
+    var per = per_slice(e, sym)
+    if staged and n > per:
+        raise Error("staged block larger than one slice")
+    var hp = e.hin.unsafe_ptr()
     var done = 0
     while done < n:
-        var cnt = min(e.cap, n - done)
-        var o = 0
-        for i in range(cnt * NFC * L):
-            e.hin[i] = inp[done * NFC * L + i]
-        ctx.enqueue_copy(e.xf, e.hin)
+        var cnt = min(per, n - done)
+        var off = cnt * ROWIN
+        if not staged:
+            unsafe_memcpy(dest=hp, src=inp + done * NFC * L, count=cnt * NFC * L)
+            var o2 = cnt * NFC * L
+            comptime if NCC > 0:
+                unsafe_memcpy(dest=hp + o2, src=pc + done * NCC * LC, count=cnt * NCC * LC)
+                o2 += cnt * NCC * LC
+            comptime if NS > 0:
+                unsafe_memcpy(dest=hp + o2, src=ps + done * NS, count=cnt * NS)
+                o2 += cnt * NS
+            comptime if CAL > 0:
+                unsafe_memcpy(dest=hp + o2, src=pk + done * 3, count=cnt * 3)
+        ctx.enqueue_copy(e.xin.create_sub_buffer[F32](0, off), e.hin.create_sub_buffer[F32](0, off))
+        for m in range(e.nm):
+            forward(ctx, e, 2 * cnt if sym else cnt, cnt, m)
+            k_out(ctx, e, cnt, sym, Float32(1) / Float32(e.nm), m > 0)
+        ctx.enqueue_copy(e.hout.create_sub_buffer[F32](0, cnt * HQ), e.fin.create_sub_buffer[F32](0, cnt * HQ))
         ctx.synchronize()
-        comptime if NCC > 0:
-            for i in range(cnt * NCC * LC):
-                e.hin[i] = pc[done * NCC * LC + i]
-            ctx.enqueue_copy(e.xc, e.hin)
-            ctx.synchronize()
-        comptime if NS + CAL > 0:
-            for r in range(cnt):
-                for j in range(NS):
-                    e.hin[r * (NSS + 3) + j] = ps[(done + r) * NS + j]
-                comptime if CAL > 0:
-                    for j in range(3):
-                        e.hin[r * (NSS + 3) + NSS + j] = pk[(done + r) * 3 + j]
-            ctx.enqueue_copy(e.xs, e.hin)
-            ctx.synchronize()
-        forward(ctx, e, cnt)
-        ctx.enqueue_copy(e.hout, e.res)
-        ctx.synchronize()
-        for i in range(cnt * HQ):
-            res[done * HQ + i] = e.hout[i]
+        unsafe_memcpy(dest=res + done * HQ, src=e.hout.unsafe_ptr(), count=cnt * HQ)
         done += cnt
 
 
-def infer_sym(ctx: DeviceContext, e: Engine, inp: FP, res: FP, n: Int) raises:
-    """Flip-averaged forecast: q = (q(x) - mirror(q(flip x))) / 2; RET / XRT / RAW channels change sign, SHR mirrors."""
-    var x2 = List[Float32](length=n * ROWIN, fill=0)
-    var o2 = List[Float32](length=n * HQ, fill=0)
-    for i in range(n * ROWIN):
-        x2[i] = inp[i]
-    for r in range(n):
-        for c in range(NFC):
-            var kd = Int((e.kf >> Int64(4 * c)) & 15)
-            for i in range(L):
-                var j = (r * NFC + c) * L + i
-                if kd == 0 or kd == 4 or kd == 5:
-                    x2[j] = -inp[j]
-                elif kd == 3:
-                    x2[j] = Float32(1) - inp[j]
-        for i in range(LC if NCC > 0 else 0):
-            var j = n * NFC * L + r * NCC * LC + i
-            x2[j] = -inp[j]
-    infer(ctx, e, inp, res, n)
-    infer(ctx, e, lp(x2), lp(o2), n)
-    for row in range(n):
-        for h in range(H):
-            for j in range(NQ // 2 + 1):
-                var a = res[row * HQ + h * NQ + j]
-                var b = res[row * HQ + h * NQ + NQ - 1 - j]
-                res[row * HQ + h * NQ + j] = 0.5 * (a - o2[row * HQ + h * NQ + NQ - 1 - j])
-                res[row * HQ + h * NQ + NQ - 1 - j] = 0.5 * (b - o2[row * HQ + h * NQ + j])
-
-
-def run_infer(ctx: DeviceContext, e: Engine, inp: FP, res: FP, n: Int) raises:
-    if getenv("BMT_SYM", "0") == "1":
-        infer_sym(ctx, e, inp, res, n)
-    else:
-        infer(ctx, e, inp, res, n)
+def run_infer(ctx: DeviceContext, e: Engine, inp: FP, res: FP, n: Int, staged: Bool = False) raises:
+    infer(ctx, e, inp, res, n, e.sym, staged)
 
 
 def selftest(dir: String) raises -> Bool:
@@ -576,7 +677,7 @@ def selftest(dir: String) raises -> Bool:
     var got = List[Float32](length=nr, fill=0)
     with DeviceContext() as ctx:
         var e = Engine(ctx, dir + "/bmt2.bin", 64)
-        infer(ctx, e, lp(xin), lp(got), n)
+        infer(ctx, e, lp(xin), lp(got), n, False)
         var maxrel = Float32(0)
         for row in range(n):
             var acc = Float32(0)
@@ -601,18 +702,24 @@ def bench(path: String, batch: Int, iters: Int) raises:
             xin[batch * ROWIN - batch * 3 + i] = Float32(i % 2)
     var got = List[Float32](length=batch * HQ, fill=0)
     with DeviceContext() as ctx:
-        var e = Engine(ctx, path, min(batch, 4096))
+        var e = Engine(ctx, path, min(batch * 2, 8192))
+        var sym = e.sym
+        var staged = batch <= per_slice(e, sym)                       # as serve: the request lands in the pinned buffer
+        var ip_ = lp(xin)
+        if staged:
+            unsafe_memcpy(dest=e.hin.unsafe_ptr(), src=lp(xin), count=batch * ROWIN)
+            ip_ = e.hin.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
         for _ in range(5):
-            run_infer(ctx, e, lp(xin), lp(got), batch)
+            run_infer(ctx, e, ip_, lp(got), batch, staged)
         var lat = List[Float64](length=iters, fill=0)
         var t00 = perf_counter_ns()
         for it in range(iters):
             var t0 = perf_counter_ns()
-            run_infer(ctx, e, lp(xin), lp(got), batch)
+            run_infer(ctx, e, ip_, lp(got), batch, staged)
             lat[it] = Float64(perf_counter_ns() - t0) / 1e6
         var total = Float64(perf_counter_ns() - t00) / 1e9
         sort(lat)
-        print("batch", batch, "rows/s", Float64(batch * iters) / total, "p50_ms", lat[iters // 2], "p99_ms", lat[min(iters - 1, (iters * 99) // 100)], "check", got[0])
+        print("batch", batch, "members", e.nm, "rows/s", Float64(batch * iters) / total, "p50_ms", lat[iters // 2], "p99_ms", lat[min(iters - 1, (iters * 99) // 100)], "check", got[0])
 
 
 def serve(path: String, cap: Int) raises:
@@ -629,12 +736,20 @@ def serve(path: String, cap: Int) raises:
             var n = Int(hdr[0])
             if n <= 0:
                 return
-            if len(bi) < n * ROWIN:
-                bi = List[Float32](length=n * ROWIN, fill=0)
+            var sym = e.sym
+            if len(bo) < n * HQ:
                 bo = List[Float32](length=n * HQ, fill=0)
-            if fd_read(0, bi.unsafe_ptr().unsafe_bitcast[UInt8]().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), n * ROWIN * 4) != n * ROWIN * 4:
-                raise Error("short request body")
-            run_infer(ctx, e, lp(bi), lp(bo), n)
+            if n <= per_slice(e, sym):                                # one slice: the request body is read into the pinned upload buffer
+                var hb = e.hin.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                if fd_read(0, hb.unsafe_bitcast[UInt8]().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), n * ROWIN * 4) != n * ROWIN * 4:
+                    raise Error("short request body")
+                run_infer(ctx, e, hb, lp(bo), n, True)
+            else:
+                if len(bi) < n * ROWIN:
+                    bi = List[Float32](length=n * ROWIN, fill=0)
+                if fd_read(0, bi.unsafe_ptr().unsafe_bitcast[UInt8]().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), n * ROWIN * 4) != n * ROWIN * 4:
+                    raise Error("short request body")
+                run_infer(ctx, e, lp(bi), lp(bo), n)
             fd_write(1, hp, 4)
             fd_write(1, bo.unsafe_ptr().unsafe_bitcast[UInt8]().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin](), n * HQ * 4)
 

@@ -22,6 +22,16 @@ One model per fold, trained only on data ending 104 days before the fold (synthe
   phase-2 model is 0.44 % [0.36, 0.52] at hourly h 1, shrinking to 0.16 % at h 24. Never-trained-on assets show the same
   numbers; in the last fold alone the h 24 gain over the 2,048-context Timestral is not separated.
 - The 0.11M model scores the same as the 0.82M one within 0.05 %.
+- Seed ensemble (wave 4, promoted on validation, scored once): `bmt2-ohlc+cal@t-ens4-sym`, the quantile average of four 0.11M
+  seeds, adds 0.04 % [0.01, 0.06] / 0.06 % [0.03, 0.09] / 0.06 % [0.03, 0.10] at hourly h 1 / 6 / 24 over the single seed (daily not
+  separated) and is the best row here: +4.57 % sPL against the random walk at hourly h 1, +1.12 % [0.94, 1.31] / +0.81 % / +1.17 %
+  against the Timestral reference pipeline, +0.99 % / +0.49 % / +0.41 % against Timestral with a 2,048-bar context. The same
+  ensemble of synthetic-data seeds (`bmt2-syn-ohlc+cal@t-ens4-sym`) moves the permissive tier by about 0.02 %, within noise on test.
+  Longer training (4,000 steps) and batch 4,096 were not promoted (`docs/RESEARCH_LOG.md`, wave 4).
+- Distillation (wave 5, promoted on validation for every one of 3 seeds, scored once): `bmt2-ohlc+cal@t-kd` is one 0.11M model
+  trained on 0.5 x pinball to the outcomes + 0.5 x L1 to the 4-seed ensemble's quantiles (same fold, same training window). It matches
+  the ensemble at a quarter of the compute: +0.07 % [0.03, 0.10] / +0.08 % / +0.06 % over the single seed at hourly h 1 / 6 / 24, +4.56 %
+  against the random walk, +1.10 % [0.92, 1.29] / +0.78 % / +1.14 % against the Timestral reference pipeline. It is the q0 level.
 - What the search did not find: nothing else passed. Volume, taker-buy share, long-memory volatility scalars, vol-of-vol, a second
   token stream of 256 daily bars, BTC / ETH returns, market breadth, peer baskets, BTC range, and realised variance from 5-minute
   returns (with its downside share) each moved validation sPL by less than 0.1 %, inside the bootstrap noise.
@@ -88,8 +98,10 @@ and 5e-6 to 4e-5 (GPU) scale units, tolerance 2e-4. Timestral rows are the measu
 
 {{SPEED}}
 
-`bmt2-ohlc+cal@t` forwards 218k rows/s on the GPU (14x `timestral-fast`, 39x `timestral-max`) and 24k rows/s on 12 CPU threads;
-a single row takes 0.3 ms on one CPU thread.
+`bmt2-ohlc+cal@t` forwards 218k rows/s on the GPU (14x `timestral-fast`, 39x `timestral-max`) and 24k rows/s on 12 CPU threads with
+the first kernels; the 2026-11-19 kernels (rows marked so; PLAN.md section 4) reach 831k rows/s on the GPU, 340k flip-averaged,
+and 70k rows/s on 12 CPU threads; a single row takes 0.22 ms on one CPU thread and 0.54 ms on the GPU. The GPU bench reads the
+batch from the pinned upload buffer, as `serve` now does with a request.
 
 ## Learning curve of the phase-2 model (fold F4)
 

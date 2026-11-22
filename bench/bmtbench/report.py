@@ -24,7 +24,9 @@ def speed_md():
     for k, r in s.items():
         b = r["batches"]
         g = lambda x: f"{b[x]['rows_s']:,.0f}, {b[x]['p50_ms']:.2f} / {b[x]['p99_ms']:.2f}" if x in b else "not run (minutes per call)"
-        nm = names.get(k, (k.split(":")[1] + (", Mojo GPU (fp32)" if "gpu" in k else ", Mojo CPU")) if ":" in k and k.split(":")[1].startswith("bmt2") else k)
+        k0, v2 = (k[:-3], True) if k.endswith(" v2") else (k, False)    # " v2": the 2026-11-19 kernels (blocked CPU GEMM, single-sync GPU path)
+        nm = names.get(k0, (k0.split(":")[1] + (", Mojo GPU (fp32)" if "gpu" in k0 else ", Mojo CPU")) if ":" in k0 and k0.split(":")[1].startswith("bmt2") else k0)
+        nm = nm + (", 2026-11-19 kernel" if v2 else "")
         out.append(f"| {nm} | {r.get('device', '')} | {g('1')} | {g('64')} | {g('4096')} | {r.get('vram_mib') or '-'} | {mb(r.get('size_bytes'))} | {mb(r.get('weights_bytes'))} | "
                    f"{r['before']['gpu_util_pct']} %, {r['before']['gpu_mem_used_mib'] / 1024:.1f} GB |")
     out += ["", "Batch pipelines of the statistical baselines (whole benchmark run, numpy / numba, not a latency measurement):", "",

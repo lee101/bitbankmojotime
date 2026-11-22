@@ -106,5 +106,47 @@
  },
  "bmt2-syn-ohlc+cal@t-sym": {
   "params": "0.12M, synthetic data only"
+ },
+ "bmt2-ohlc+cal+ic10": {
+  "params": "0.82M, ranking loss"
+ },
+ "bmt2-ohlc+cal+ic10-sym": {
+  "params": "0.82M, ranking loss"
+ },
+ "bmt2-ohlc+cal+ic10@t": {
+  "params": "0.12M, ranking loss"
+ },
+ "bmt2-ohlc+cal+ic10@t-sym": {
+  "params": "0.12M, ranking loss"
+ },
+ "bmt2-syn-ohlc+cal-ctx256@t": {
+  "params": "0.11M, synthetic, 256-bar context"
+ },
+ "bmt2-syn-ohlc+cal-ctx256@t-sym": {
+  "params": "0.11M, synthetic, 256-bar context"
+ },
+ "bmt2-ohlc+cal+rv5": {
+  "params": "0.82M; NOT promoted, 47-symbol training, scored by another session outside the search protocol"
+ },
+ "bmt2-ohlc+cal+rv5-sym": {
+  "params": "0.82M; NOT promoted, 47-symbol training, scored by another session outside the search protocol"
+ },
+ "bmt2-ohlc+cal@t-ens4": {
+  "params": "4 x 0.11M, seed ensemble"
+ },
+ "bmt2-ohlc+cal@t-ens4-sym": {
+  "params": "4 x 0.11M, seed ensemble"
+ },
+ "bmt2-syn-ohlc+cal@t-ens4": {
+  "params": "4 x 0.11M, synthetic data only, seed ensemble"
+ },
+ "bmt2-syn-ohlc+cal@t-ens4-sym": {
+  "params": "4 x 0.11M, synthetic data only, seed ensemble"
+ },
+ "bmt2-ohlc+cal@t-kd": {
+  "params": "0.11M, distilled from the 4-seed ensemble"
+ },
+ "bmt2-ohlc+cal@t-kd-sym": {
+  "params": "0.11M, distilled from the 4-seed ensemble"
  }
 }

@@ -1,0 +1,2 @@
+# q0: one forward per row (fastest)
+../weights/bmt2-syn-ohlc+cal@t/bmt2.bin

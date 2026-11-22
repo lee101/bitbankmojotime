@@ -2,19 +2,47 @@
 
 Numbers quoted here are in `bench/LEADERBOARD.md`; licences in `docs/SCOPE.md`.
 
-## 1. Where things stand
+## 1. Where things stand (updated after the input search, 2026-11-12 evening)
 
-- The benchmark is hard and flat: on hourly crypto returns every serious model sits within about 4 % (asset-equal scaled
-  pinball) of a zero-mean Gaussian random walk, and GARCH(1,1)-t is statistically level with Timestral. Point forecasts are
-  almost pure noise: the foundation models' medians are no better than zero, the candidates' are 0.2-0.3 % better hourly
-  (directional accuracy 51-53 %, rank IC 0.04-0.065, possibly microstructure). The contest is volatility and tail shape.
-- A 0.1M-0.8M parameter model trained in about one minute per fold beats the reference Timestral pipeline by 0.4-0.9 % sPL on
-  unseen folds (paired intervals exclude zero; 0.1-0.5 % against Timestral with a 2,048-bar context) at 17x-87x the GPU throughput
-  of the production `tsfm16` kernel, and runs on CPU. The size and data learning curves are flat: neither more parameters
-  (0.1M -> 0.8M -> 4.8M) nor more training symbols (5 % -> 25 % -> 100 % of the pool) moves the score beyond bootstrap noise.
-  Capacity and data volume are not the bottleneck; the information in a 512-bar close-to-close context is.
-- So "pushing it" means better inputs, not a bigger network. That decides the search space below.
-- Everything trained so far is CC BY-NC-SA research weight (Binance Vision terms) and may not be used by the bots.
+- The benchmark is hard and flat: every serious model sits within about 4.5 % (asset-equal scaled pinball) of a zero-mean
+  Gaussian random walk; GARCH(1,1)-t is level with Timestral. The contest is volatility and tail shape.
+- Three search waves, 90 configurations, 3.8 GPU-hours of search (about 4.5 with refits, placebo, synthetic training and scoring) of the 12 budgeted, validation only (`docs/RESEARCH_LOG.md`):
+  - promoted for pinball: bar range + Garman-Klass sigma, then calendar inputs. On the unseen folds the promoted model beats
+    the Timestral reference pipeline by 1.0 % / 0.75 % / 1.1 % (hourly h 1 / 6 / 24), the 2,048-context Timestral by
+    0.9 % / 0.4 % / 0.4 %, GARCH by 1.0-1.3 %, all separated;
+  - not promoted (each under 0.1 % on validation): volume, taker-buy share, long-memory volatility scalars, vol-of-vol, a daily
+    token stream of 256 days, BTC / ETH returns, market breadth, peer baskets, BTC range, realised variance from 5-minute
+    returns and its downside share;
+  - promoted for ranking: a cross-sectional correlation loss on the median (validation rank IC +0.018 at h 1, +0.016 at h 6)
+    at a pinball cost of 0.16 %. Market-state inputs then raise the 24 h IC by a further 0.016 but lower the 1 h IC, so the
+    registered rule did not promote them: a lead for a 24 h-only objective.
+- Learning curves: flat for pinball in parameters (0.11M = 0.82M = 4.8M) and in data (17 symbols = 333). For ranking the
+  size is flat and the data is not quite (5 % of the symbols costs 0.003 IC at h 1).
+- Permissive tier: the promoted model trained on synthetic bars only loses 0.2-0.6 % against the research weights and still
+  beats Timestral hourly. That is the tier the bots may use.
+- Tradable value: rank IC 0.05-0.07 is real and two to three times Timestral's, but no rule shows a robust edge after costs.
+
+### What "at its limit" looks like now
+
+- For pinball with inputs derivable from klines (hourly and 5-minute OHLCV, taker flow, cross-asset bars, calendar) the proposal
+  list is exhausted: after the two promotions, 26 further configurations and both learning curves moved nothing beyond noise.
+  The formal stop rule (100 trials without a promotion) has not been reached; the honest statement is "no untested kline input
+  left", not "proven optimal".
+- New information would have to come from data that is not in klines: order-book and trade-level flow, perpetual funding / basis
+  / open interest, options-implied volatility, scheduled events. Each needs a data source with usable terms first.
+- For trading value the limit is costs, not the forecaster: a perfect copy of today's signal earns 5-14 bp gross per round trip.
+
+### Next, in order of expected value
+
+1. A 24 h-only ranking objective (the only horizon where gross edge exceeds maker-tier costs) with market-state inputs; promote
+   on the 24 h long-short net of costs on validation, then one test-fold scoring.
+2. Check the two net-of-cost leads with real fills (order-book snapshots or trades): the rare-rebound rule at 1 h and the 24 h
+   long-short book. Until then they are statistics, not strategies.
+3. Permissive tier: the 256-bar variant for the rotation consumer (trained in this stage), then a shadow run per
+   `docs/INTEGRATION.md`. A ranking head cannot be trained on independent synthetic series; it needs cross-sections of real data
+   under commercial terms.
+4. Kernel work of section 4 (done for bmt2 on 2026-11-19: 2-3x on CPU, 2-8x on GPU; speed is not the bottleneck for any
+   current consumer).
 
 ## 2. Autoresearch loop
 
@@ -80,18 +108,34 @@ timer on the pod at start; inputs are the public archives fetched on the pod (or
 minted for one bucket); logs and checkpoints streamed to R2 so a killed pod loses
 nothing; no trading credentials or private data on a pod. Note: the existing infra only launches serverless endpoints, so a pod launcher must be written and its credential source agreed.
 
-## 4. Inference kernels: next measured steps
+## 4. Inference kernels
 
-Current state: `src/bmt.mojo` (CPU, fp32, 8-lane SIMD, 4-row register blocking, last-token-only final layer) and
-`src/bmt_gpu.mojo` (fp32 cuBLAS GEMMs + six fused kernels), both matching PyTorch fp32 within 2e-5 scale units, tolerance 2e-4.
+Done on 2026-11-19 (`src/bmt2.mojo`, `src/bmt2_gpu.mojo`; before / after rows in the speed table, same shared host, parity tests in
+`tests/test_mojo_parity.py`: stored PyTorch vectors, odd row counts, flip averaging, seed ensembles, CPU and GPU):
+- CPU: weights packed at load into 16-column panels; a 6x16 register-blocked FMA microkernel replaces the per-output dot products
+  (no horizontal reductions); up to 8 sequences (or 4 rows and their mirrors) go through each layer together so a weight panel is
+  streamed once per 256 tokens; attention scores 8 keys at a time from a transposed key block; vectorised asinh / log1p input
+  normalisation. Size t: 3.2k -> 7.2k rows/s on one thread, 24.5k -> 70k on 12 threads; size s on 12 threads 4.6k -> 10.4k.
+- GPU: one pinned upload, one download and one synchronisation per slice (serve reads a request straight into the pinned buffer);
+  flip averaging on the device (the mirrored rows are derived in the normalisation kernel, one batched forward of 2n rows, then a
+  combine kernel) instead of a host-side second pass; input normalisation one block per row instead of one thread per row; last
+  layer on the last token only; seed ensembles in one engine (members' weights side by side, averaged on the device).
+  Size t at batch 4096: 203k -> 470-680k rows/s, flip-averaged 60k -> 370-490k; batch 1 p50 2.5 ms -> 0.6 ms (co-tenants at
+  85-100 % utilisation, so the ranges are run-to-run spread).
 
-GPU, in order: last-token-only final layer (about 19 % fewer FLOPs at four layers); fp16 / bf16 tensor-core GEMMs through the
-Modular kernel library as `tsfm16` does (the fp32 path leaves an order of magnitude of GEMM rate unused; parity tolerance becomes
-about 1e-3); fuse bias + LayerNorm into the GEMM epilogues; `compile_function` once per kernel instead of per-enqueue closures;
-a shared-memory request ring instead of pipes for batch-1 latency; builds for sm86 / sm89.
-CPU: 2x4 output-row blocking, an AVX-512 build for newer hosts, fp16 weights, a `shared-lib` build with a C ABI so Go and Python
-call it in process.
-Each step lands with before / after rows in the speed table and the self-test still passing.
+Measured and not shipped: bf16 GEMMs. cuBLAS bf16-in / fp32-out is exact on a test product but no faster than fp32 at this shape
+(M 131k x K 64 x N 256: 170 vs 164 us); these GEMMs are bound by writing their fp32 outputs, so bf16 inputs buy nothing. A gain needs
+bf16 activations end to end or a fused f1 -> ReLU -> f2 kernel that never writes the 4D hidden layer (worth about 0.2-0.3 ms of a
+~5 ms forward at batch 4096). Fused residual + LayerNorm was tried and reverted (no measurable gain).
+
+Quality dial (`models/<tier>/levels/q{0,1,2}.txt`, passed as `@file` to `bmt2` / `bmt2_gpu`): q0 distilled single model (1 forward per row),
+q1 4-seed ensemble (4), q2 4-seed ensemble flip-averaged (8). Validation (`train/dial.py`, research log) and test agree that q1 is the
+efficient point: 8 seeds, mixing in the size-s model, flip averaging on top and a post-hoc quantile calibration add nothing separated.
+
+Distillation (wave 5) is done: one model trained toward the 4-seed ensemble's quantiles matches the ensemble on test at one forward
+per row, so q0 is now the distilled model. Next, in order: fused residual + LayerNorm and bias + ReLU epilogues; a
+warp-per-row LayerNorm; CUDA-graph style replay of the fixed launch sequence for batch-1 latency; a `shared-lib` C ABI build so Go
+and Python call the CPU kernel in process; sm86 / sm89 builds; the same CPU rework for the phase-2 `src/bmt.mojo`.
 
 ## 5. Plugging into the bots (after the licence gate)
 
@@ -120,7 +164,7 @@ thousands on CPU for the small sizes. Two uses:
 ## 7. Open decisions for the owner
 
 1. Name: `bitbankmojotime` (working), repo under `lee101/`, Hugging Face id.
-2. Code licence: Apache-2.0 (proposed) or MIT.
+2. Code licence: `LICENSE` is Apache-2.0 since commit 6e6ba68; confirm that this covers the permissive-tier weights too.
 3. Data policy. Binance Vision archives are CC BY-NC-SA 4.0 with trading / commercial prohibitions (terms of 2026-08-26). Options:
    (a) public benchmark + non-commercial research weights only; (b) add a permissive tier trained on synthetic data and on market
    data held under commercial terms, which is also the only tier the bots may use; (c) buy a commercial data licence.

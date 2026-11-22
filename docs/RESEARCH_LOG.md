@@ -111,3 +111,67 @@ Trials: 15 configurations, 0.82 GPU-hours, 2 rounds. Stop reason: proposal list 
 | 13 | 2 | lc | `ohlc+cal@m` | learning curve: size m, 100% of training symbols | F1 F2 F3 F4 | 1500 | 0.28191 |  | hourly h1 +0.01 [-0.03, +0.04]; hourly h6 +0.02 [-0.04, +0.07]; hourly h24 -0.07 [-0.16, +0.01]; daily h1 -0.22 [-0.37, -0.08]; daily h5 -0.39 [-0.71, -0.03] | curve point |
 | 14 | 2 | lc | `ohlc+cal@f0.05` | learning curve: size s, 5% of training symbols | F1 F2 F3 F4 | 1500 | 0.28215 |  | hourly h1 -0.23 [-0.29, -0.19]; hourly h6 -0.18 [-0.30, -0.07]; hourly h24 -0.32 [-0.53, -0.13]; daily h1 -0.05 [-0.45, +0.35]; daily h5 -0.33 [-0.54, -0.10] | curve point |
 | 15 | 2 | lc | `ohlc+cal@f0.25` | learning curve: size s, 25% of training symbols | F1 F2 F3 F4 | 1500 | 0.28186 |  | hourly h1 -0.03 [-0.07, +0.02]; hourly h6 -0.12 [-0.19, -0.04]; hourly h24 -0.06 [-0.19, +0.07]; daily h1 -0.18 [-0.40, +0.06]; daily h5 -0.20 [-0.60, +0.20] | curve point |
+
+## Wave 4: training-side search (2026-11-19)
+
+Inputs fixed at the promoted `ohlc+cal`; size t (0.11M); same folds, validation rows, objective and promotion rule as above, with the
+cost cap of 4x the base size-s encoder (a k-member ensemble costs k forwards). `ens_val` rows compare a checkpoint ensemble with the
+single checkpoint on the same rows (the permissive tier: members trained on synthetic bars only, seeds 0-3).
+
+| config | change | validation objective | vs incumbent % | paired improvement % by (task, horizon), 95 % | result |
+|---|---|---|---|---|---|
+| `ohlc+cal@t-inc` | incumbent: one seed, 1,500 steps x batch 1,024, lr 1e-3 | 0.28146 |  |  | incumbent |
+| `ohlc+cal@t-ens4` | quantile average of 4 seeds | 0.28142 | +0.015 | hourly h1 +0.06 [+0.03, +0.09]; hourly h6 +0.07 [+0.03, +0.11]; hourly h24 +0.07 [+0.02, +0.11]; daily h1 -0.02 [-0.17, +0.17]; daily h5 -0.09 [-0.30, +0.11] | PROMOTED |
+| `ohlc+cal@t-long4k` | 4,000 steps | 0.28160 | -0.048 | hourly h1 +0.05 [+0.02, +0.09]; hourly h6 +0.02 [-0.07, +0.10]; hourly h24 +0.02 [-0.10, +0.15]; daily h1 -0.15 [-0.33, -0.04]; daily h5 -0.21 [-0.69, +0.16] | not promoted |
+| `ohlc+cal@t-bs4k` | batch 4,096, lr 2e-3 | 0.28186 | -0.140 | hourly h1 +0.02 [-0.02, +0.07]; hourly h6 -0.01 [-0.14, +0.12]; hourly h24 +0.01 [-0.15, +0.17]; daily h1 -0.14 [-0.30, +0.03]; daily h5 -0.58 [-1.19, -0.17] | not promoted |
+| `ohlc+cal@t-ens8` | quantile average of 8 seeds | 0.28145 | +0.003 | hourly h1 +0.06 [+0.02, +0.09]; hourly h6 +0.09 [+0.04, +0.13]; hourly h24 +0.08 [+0.03, +0.13]; daily h1 -0.02 [-0.18, +0.19]; daily h5 -0.18 [-0.39, +0.01] | PROMOTED |
+| `syn-ohlc+cal@t-ens4` | 4 synthetic-data seeds vs seed 0 (permissive tier) | 0.28170 | +0.033 | hourly h1 +0.03 [+0.01, +0.04]; hourly h6 +0.01 [-0.01, +0.03]; hourly h24 +0.02 [+0.00, +0.04]; daily h1 +0.04 [-0.02, +0.09]; daily h5 +0.06 [+0.02, +0.10] | PROMOTED |
+
+## Quality dial: compute vs validation sPL (`train/dial.py`, 2026-11-19)
+
+Out of sample on the second half of each fold's validation window (the calibration is fitted on the first half). Paired sPL
+improvement over one forward of the single seed-0 model, % (95 %). `+cal` = affine spread + per-knot shift per (task, horizon).
+Reading: a 4-seed ensemble is the whole gain (hourly); 8 seeds, adding the size-s model, flip averaging on top and calibration add
+nothing separated, and the calibration intervals are wide (45 days fit). Daily on these half windows is worse with ensembling;
+on the full validation windows (wave 4) and on test it is not separated. Levels shipped: q0 single (1 forward), q1 ens4 (4), q2 ens4-sym (8).
+
+| level | forwards / row | hourly h1 | hourly h6 | hourly h24 | daily h1 | daily h5 |
+|---|---|---|---|---|---|---|
+| single | 1 | +0.000 [+0.000, +0.000] | +0.000 [+0.000, +0.000] | +0.000 [+0.000, +0.000] | +0.000 [+0.000, +0.000] | +0.000 [+0.000, +0.000] |
+| single+cal | 1 | +0.019 [-0.019, +0.056] | -0.054 [-0.218, +0.117] | +0.086 [-0.484, +0.704] | -0.569 [-1.824, +0.997] | +0.451 [-2.381, +4.525] |
+| single-sym | 2 | -0.008 [-0.039, +0.023] | -0.007 [-0.041, +0.031] | -0.002 [-0.049, +0.047] | -0.070 [-0.243, +0.081] | -0.186 [-0.272, -0.108] |
+| single-sym+cal | 2 | +0.009 [-0.041, +0.060] | -0.056 [-0.223, +0.126] | +0.075 [-0.486, +0.700] | -0.588 [-1.914, +1.025] | +0.459 [-2.327, +4.498] |
+| ens4 | 4 | +0.044 [+0.005, +0.083] | +0.085 [+0.035, +0.128] | +0.119 [+0.049, +0.194] | -0.154 [-0.274, -0.036] | -0.149 [-0.430, +0.092] |
+| ens4+cal | 4 | +0.051 [-0.002, +0.105] | +0.035 [-0.133, +0.221] | +0.222 [-0.338, +0.841] | -0.725 [-1.998, +0.862] | +0.379 [-2.596, +4.439] |
+| ens4-sym | 8 | +0.029 [-0.011, +0.073] | +0.065 [+0.012, +0.114] | +0.105 [+0.022, +0.191] | -0.204 [-0.354, -0.042] | -0.357 [-0.581, -0.160] |
+| ens4-sym+cal | 8 | +0.037 [-0.020, +0.100] | +0.017 [-0.153, +0.214] | +0.199 [-0.354, +0.824] | -0.723 [-1.978, +0.881] | +0.246 [-2.724, +4.382] |
+| ens8-sym | 16 | +0.023 [-0.020, +0.071] | +0.074 [+0.017, +0.130] | +0.114 [+0.027, +0.214] | -0.193 [-0.353, -0.024] | -0.387 [-0.574, -0.217] |
+| ens8-sym+cal | 16 | +0.035 [-0.025, +0.097] | +0.013 [-0.162, +0.226] | +0.184 [-0.390, +0.827] | -0.698 [-1.935, +0.910] | +0.282 [-2.669, +4.473] |
+| ens8-sym+s | 18 | +0.021 [-0.022, +0.068] | +0.068 [+0.013, +0.125] | +0.108 [+0.018, +0.205] | -0.177 [-0.324, -0.021] | -0.376 [-0.558, -0.213] |
+| ens8-sym+s+cal | 18 | +0.034 [-0.027, +0.097] | +0.008 [-0.171, +0.223] | +0.190 [-0.379, +0.834] | -0.689 [-1.921, +0.910] | +0.300 [-2.629, +4.452] |
+
+## Wave 5: seed-robust hyperparameters and distillation (2026-11-19)
+
+Every config trained with seeds 0-2. Ensemble rule: the candidate's 3-seed quantile average vs the incumbent's, paired, the usual
+promotion rule, plus a win for at least 2 of 3 seed pairs. `ema999` is a no-op (the EMA warm-up min(cap, (i+1)/(i+10)) stays under
+0.998 for 1,500 steps). Distillation (`kd`: loss = (1 - w) pinball + w L1 to the frozen wave-4 4-seed ensemble of the same fold) is
+judged single model vs single model, the question it answers: each of the 6 distilled seeds passes the promotion rule against its
+own incumbent seed (hourly +0.03 to +0.06 %), so `kd0.5` was promoted and scored once on test (`bmt2-ohlc+cal@t-kd`).
+Lead, not promoted: `patch8` (64 tokens, 2x compute) wins all 3 seed pairs (+0.03 / +0.11 / +0.13 %, largest daily) but no seed passes
+the single-model rule and the ensemble intervals include zero; worth a 5-seed rerun or patch 8 + distillation. `steps3k` improves
+the 3-seed ensemble hourly but wins 1 of 3 seeds. Lower lr, a third layer, short warm-up and d 96 are worse or flat.
+
+| config | change | validation objective (3-seed ensemble) | seed wins | per-seed improvement % | ensemble paired improvement % by (task, horizon), 95 % | result |
+|---|---|---|---|---|---|---|
+| `ohlc+cal@t-inc` | {} | 0.28142 |  |  |  | incumbent |
+| `ohlc+cal@t-ema999` | {"ema_d": 0.999} | 0.28142 | 0/3 | +0.000, +0.000, +0.000 | hourly h1 +0.00 [+0.00, +0.00]; hourly h6 +0.00 [+0.00, +0.00]; hourly h24 +0.00 [+0.00, +0.00]; daily h1 +0.00 [+0.00, +0.00]; daily h5 +0.00 [+0.00, +0.00] | not promoted |
+| `ohlc+cal@t-lr2e-3` | {"lr": 0.002} | 0.28143 | 2/3 | +0.013, -0.059, +0.028 | hourly h1 +0.02 [-0.00, +0.04]; hourly h6 +0.02 [-0.03, +0.07]; hourly h24 +0.01 [-0.05, +0.07]; daily h1 +0.01 [-0.15, +0.12]; daily h5 -0.10 [-0.36, +0.16] | not promoted |
+| `ohlc+cal@t-kd0.5` | {"teacher": "wave-4 ens4", "kd": 0.5} | 0.28145 | 3/3 | +0.010, +0.063, +0.033 | hourly h1 -0.00 [-0.02, +0.01]; hourly h6 +0.00 [-0.02, +0.02]; hourly h24 -0.01 [-0.03, +0.02]; daily h1 -0.00 [-0.04, +0.04]; daily h5 -0.04 [-0.11, +0.03] | ensemble rule: not promoted; single-model rule: passed for 3/3 seeds (PROMOTED) |
+| `ohlc+cal@t-wd0.1` | {"wd": 0.1} | 0.28143 | 1/3 | +0.014, -0.013, -0.021 | hourly h1 +0.00 [-0.01, +0.01]; hourly h6 +0.00 [-0.02, +0.02]; hourly h24 -0.00 [-0.03, +0.03]; daily h1 -0.01 [-0.05, +0.02]; daily h5 -0.03 [-0.12, +0.06] | not promoted |
+| `ohlc+cal@t-kd0.8` | {"teacher": "wave-4 ens4", "kd": 0.8} | 0.28145 | 3/3 | +0.010, +0.062, +0.033 | hourly h1 -0.01 [-0.02, +0.01]; hourly h6 -0.00 [-0.02, +0.02]; hourly h24 -0.01 [-0.04, +0.02]; daily h1 -0.00 [-0.04, +0.04]; daily h5 -0.04 [-0.11, +0.03] | ensemble rule: not promoted; single-model rule: passed for 3/3 seeds |
+| `ohlc+cal@t-steps3k` | {"steps": 3000} | 0.28136 | 1/3 | -0.052, -0.023, +0.005 | hourly h1 +0.05 [+0.02, +0.08]; hourly h6 +0.04 [-0.04, +0.11]; hourly h24 +0.09 [+0.01, +0.19]; daily h1 -0.03 [-0.15, +0.09]; daily h5 -0.07 [-0.42, +0.27] | not promoted |
+| `ohlc+cal@t-patch8` | {"patch": 8} | 0.28118 | 3/3 | +0.028, +0.113, +0.126 | hourly h1 +0.02 [-0.03, +0.07]; hourly h6 +0.02 [-0.09, +0.12]; hourly h24 +0.05 [-0.05, +0.16]; daily h1 +0.14 [-0.06, +0.38]; daily h5 +0.22 [-0.23, +0.69] | not promoted |
+| `ohlc+cal@t-layers3` | {"layers": 3} | 0.28163 | 0/3 | -0.083, -0.072, -0.081 | hourly h1 -0.02 [-0.04, +0.01]; hourly h6 -0.01 [-0.06, +0.04]; hourly h24 -0.04 [-0.13, +0.06]; daily h1 -0.01 [-0.10, +0.07]; daily h5 -0.30 [-0.52, -0.11] | not promoted |
+| `ohlc+cal@t-lr5e-4` | {"lr": 0.0005} | 0.28142 | 2/3 | -0.026, +0.079, +0.002 | hourly h1 -0.09 [-0.11, -0.06]; hourly h6 -0.08 [-0.14, -0.02]; hourly h24 -0.07 [-0.16, +0.02]; daily h1 +0.08 [-0.01, +0.19]; daily h5 +0.16 [-0.03, +0.36] | not promoted |
+| `ohlc+cal@t-warm100` | {"warm": 100} | 0.28149 | 0/3 | -0.006, -0.034, -0.028 | hourly h1 +0.00 [-0.01, +0.02]; hourly h6 +0.01 [-0.01, +0.04]; hourly h24 -0.00 [-0.04, +0.04]; daily h1 -0.01 [-0.09, +0.06]; daily h5 -0.14 [-0.28, -0.03] | not promoted |
+| `ohlc+cal@t-d96` | {"d": 96} | 0.28145 | 1/3 | -0.037, +0.027, -0.018 | hourly h1 +0.01 [-0.02, +0.03]; hourly h6 +0.01 [-0.02, +0.05]; hourly h24 -0.00 [-0.07, +0.06]; daily h1 +0.04 [-0.01, +0.10]; daily h5 -0.12 [-0.23, -0.01] | not promoted |

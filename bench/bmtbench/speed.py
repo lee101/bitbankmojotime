@@ -63,7 +63,7 @@ def run(model, a):
         thr = int(model.split("@")[1]) if "@" in model else 1
         cb = os.environ.get("BMT_CPU_BIN", os.path.join(D.REPO, "build", "bmt"))
         res.update(device=f"CPU {thr} thread" + ("s" if thr > 1 else ""), batches=mojo_bench(cb, a.weights, thr),
-                   size_bytes=os.path.getsize(cb), weights_bytes=os.path.getsize(a.weights), vram_mib=0)
+                   size_bytes=os.path.getsize(cb), weights_bytes=sum(os.path.getsize(w) for w in a.weights.split(",")), vram_mib=0)
     elif model == "bmt-mojo-gpu":
         wait_for_gpu(2500)
         env = {"LD_LIBRARY_PATH": CUDA_LIB, "MODULAR_NVPTX_COMPILER_PATH": PTXAS}
@@ -72,7 +72,7 @@ def run(model, a):
         p.stderr.readline()
         res.update(vram_mib=vram_of(p.pid))
         p.kill(); p.wait()
-        res.update(device="GPU", batches=mojo_bench(b, a.weights, None, env), size_bytes=os.path.getsize(b), weights_bytes=os.path.getsize(a.weights))
+        res.update(device="GPU", batches=mojo_bench(b, a.weights, None, env), size_bytes=os.path.getsize(b), weights_bytes=sum(os.path.getsize(w) for w in a.weights.split(",")))
     elif model.startswith("bmt-torch"):
         import torch
         from train.model import BMT
@@ -83,7 +83,7 @@ def run(model, a):
             wait_for_gpu(2500)
         c = torch.load(a.ckpt, map_location="cpu", weights_only=False)
         m = BMT(**c["cfg"]); m.load_state_dict(c["sd"]); m.eval().to(dev)
-        res.update(device="GPU" if dev == "cuda" else f"CPU {torch.get_num_threads()} thr", batches={}, weights_bytes=os.path.getsize(a.weights))
+        res.update(device="GPU" if dev == "cuda" else f"CPU {torch.get_num_threads()} thr", batches={}, weights_bytes=sum(os.path.getsize(w) for w in a.weights.split(",")))
         for b in BATCHES:
             x = synth(b)
             def f():

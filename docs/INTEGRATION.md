@@ -23,6 +23,7 @@ changed or executed.
 
 ```
 bmt2 rotation <bmt2.bin> <history.json> [threads]        # BMT_SYM=1 for the flip-averaged forecast
+bmt2 rotation <s0.bin>,<s1.bin>,<s2.bin>,<s3.bin> <history.json>   # seed ensemble: quantile average of the members
 ```
 
 reads the consumer's own history file and prints one JSON object:

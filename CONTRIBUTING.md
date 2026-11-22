@@ -38,4 +38,6 @@ PYTHONPATH=bench .venv/bin/python -m bmtbench.run --task hourly --models naive,e
 PYTHONPATH=bench .venv/bin/python -m train.train --name bmt-s --size s
 PYTHONPATH=bench .venv/bin/python -m bmtbench.score
 ./build.sh gpu && ./build/bmt selftest tests/vectors/bmt-s
+./build/bmt2 selftest tests/vectors/bmt2-t-random && ./build/bmt2_gpu_t_sm120 selftest tests/vectors/bmt2-t-random
+BMT_SYM=1 ./build/bmt2 bench s0/bmt2.bin,s1/bmt2.bin,s2/bmt2.bin,s3/bmt2.bin 4096 5 12      # seed ensemble, flip-averaged, 12 threads
 ```

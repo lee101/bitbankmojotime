@@ -1,0 +1,2 @@
+# q0: distilled single model (trained to match the 4-seed ensemble), 1 forward per row: q1 quality at q0 cost
+../weights/bmt2-ohlc+cal@t-kd/bmt2.bin

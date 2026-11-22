@@ -15,6 +15,13 @@ Inference in Mojo on CPU (`build/bmt2`) or GPU (`src/bmt2_gpu.mojo`). More at ht
 |---|---|---|
 | `weights/bmt2-ohlc+cal@t/bmt2.bin` | 0.11M (2 x 64) | b628c1ae7a64afb1 |
 | `weights/bmt2-ohlc+cal/bmt2.bin` | 0.82M (4 x 128) | 443fcf460eef9552 |
+| `weights/bmt2-ohlc+cal@t-kd/bmt2.bin` | 0.11M, distilled from the 4-seed ensemble (recommended single model) | 530ba3365d36e5ed |
+| `weights/bmt2-ohlc+cal@t-ens4/s{0,1,2,3}/bmt2.bin` | 4 x 0.11M, seed ensemble (s0 = the single model) | b628c1ae7a64afb1, ddb7f956e3617279, d241d69b60da3b7d, eb3c06cc35a68d7c |
+
+The distilled model scores the same as the ensemble on the unseen folds (+4.56 % vs +4.57 % sPL against the random walk, hourly h 1)
+at one forward per row. The ensemble is run by passing the four files comma-separated (`bmt2 serve s0/bmt2.bin,s1/bmt2.bin,...`); the forecast is the
+quantile average. On the unseen folds, flip-averaged, it adds 0.04-0.06 % sPL over the single seed at hourly h 1 / 6 / 24 (paired
+intervals exclude zero; daily not separated): +1.12 % [0.94, 1.31] / +0.81 % / +1.17 % against the Timestral reference pipeline.
 
 ## Licence and limits
 - CC BY-NC-SA 4.0. Trained on Binance Vision archives, which are non-commercial and whose terms cover derived models: no live

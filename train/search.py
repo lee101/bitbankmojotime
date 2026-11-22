@@ -200,8 +200,8 @@ class Runner:
                 o.append(np.mean([res[(task, h)][a == x].mean() for x in np.unique(a)]) / math.sqrt(h))
         return float(np.mean(o))
 
-    def train_fold(s, cfg, fi, steps, frac=1.0, seed=0, bs=1024, lr=1e-3, save=None):
-        key = (json.dumps(cfg, sort_keys=True), fi, steps, frac, seed)
+    def train_fold(s, cfg, fi, steps, frac=1.0, seed=0, bs=1024, lr=1e-3, save=None, wd=0.01, ema_d=0.998, warm=300, teacher=None, kd=0.5):
+        key = (json.dumps(cfg, sort_keys=True), fi, steps, frac, seed, bs, lr, wd, ema_d, warm, teacher, kd)
         if key in s.cache:
             if save:                                                 # a fold trained at an earlier stage: write its checkpoint now
                 c = s.cache[key]
@@ -215,10 +215,18 @@ class Runner:
         lam = cfg.get("lam", 0.0)
         cfg = {k: v for k, v in cfg.items() if k != "lam"}
         model = BMT2(horizons=HZ, **cfg).to(s.dev)
-        opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01, betas=(0.9, 0.98))
-        sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda i: min(1, (i + 1) / 300) * 0.5 * (1 + math.cos(math.pi * min(1.0, i / steps))))
+        opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd, betas=(0.9, 0.98))
+        sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda i: min(1, (i + 1) / warm) * 0.5 * (1 + math.cos(math.pi * min(1.0, i / steps))))
         ema = {k: v.detach().clone() for k, v in model.state_dict().items()}
         best, best_sd = 1e9, None
+        tms = []
+        if teacher:                                                  # distillation: frozen fold checkpoints whose quantile average is a second target
+            for tp in teacher.split(":"):
+                c = torch.load(f"{tp}_{D.FOLDS[fi][0]}.pt", map_location=s.dev, weights_only=False)
+                assert c["fold"] == D.FOLDS[fi][0] and c["limit_abs"] <= smp[4]
+                tm = BMT2(horizons=HZ, **c["cfg"]).to(s.dev)
+                tm.load_state_dict(c["sd"]); tm.eval()
+                tms.append(tm)
         for it in range(steps):
             if it % 100 == 0:
                 paused += s.yield_gpu()
@@ -240,6 +248,10 @@ class Runner:
                 ok = ok & gok
             d = ys[ok][..., None] - q.float()[ok]
             loss = torch.maximum(s.lev * d, (s.lev - 1) * d).mean()
+            if tms:
+                with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16, enabled=s.dev == "cuda"):
+                    qt = torch.stack([tm(b)[0].float() for tm in tms]).mean(0)
+                loss = (1 - kd) * loss + kd * (q.float()[ok] - qt[ok]).abs().mean()
             if lam > 0:                                              # minus the within-origin Pearson correlation of median and outcome
                 w = ok.float()[:, None]
                 oh = torch.nn.functional.one_hot(gid, ng).float() * w                    # [rows, groups]
@@ -256,7 +268,7 @@ class Runner:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step(); sched.step()
             with torch.no_grad():
-                dk = min(0.998, (it + 1) / (it + 10))
+                dk = min(ema_d, (it + 1) / (it + 10))
                 for k, v in model.state_dict().items():
                     ema[k].mul_(dk).add_(v.detach(), alpha=1 - dk) if v.dtype.is_floating_point else ema[k].copy_(v)
             if (it + 1) % 250 == 0 or it + 1 == steps:

@@ -14,6 +14,10 @@ The same model as the research tier (512 bars of log return, log high/low range 
 |---|---|---|
 | `weights/bmt2-syn-ohlc+cal@t/bmt2.bin` | 0.11M (2 x 64) | 6320d4473389200f |
 | `weights/bmt2-syn-ohlc+cal/bmt2.bin` | 0.82M (4 x 128) | fa04d2ba4bfdba8c |
+| `weights/bmt2-syn-ohlc+cal@t-ens4/s{0,1,2,3}/bmt2.bin` | 4 x 0.11M, synthetic seeds 0-3 (s0 = the single model) | 6320d4473389200f, 1856b9d10ed8719f, d13698e37b26bb55, 4a8d47cb478c780d |
+
+The seed ensemble passed the validation promotion rule (+0.01-0.06 %), but on the unseen folds it moves the permissive tier by about
+0.02 %, inside the noise. Keep it only if the 4x compute costs nothing; the single model is the default.
 
 ## What touched the weights
 - Training data: `train/synth.py`, a domain-randomised simulator (multi-scale stochastic volatility with leverage and jumps,

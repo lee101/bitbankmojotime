@@ -20,9 +20,11 @@ Status: private pre-release, nothing published. Code: Apache-2.0 (`LICENSE`, `NO
 
 | hourly, horizon 1 | parameters | scaled pinball vs random walk | vs Timestral reference (paired 95 %) | rows/s, batch 4096 |
 |---|---|---|---|---|
-| bmt2-ohlc+cal@t (research tier) | 0.11M | +4.50 % | +1.04 % [+0.86, +1.23] | 218k GPU, 24k on 12 CPU threads |
-| bmt2-syn-ohlc+cal@t (synthetic data only) | 0.11M | +4.15 % | +0.68 % [+0.48, +0.88] | same |
-| bmt-t (phase 2, returns only) | 0.11M | +4.03 % | +0.56 % [+0.38, +0.73] | 489k GPU, 30k on 12 CPU threads |
+| bmt2-ohlc+cal@t-kd (research tier, distilled from the ensemble) | 0.11M | +4.56 % | +1.10 % [+0.92, +1.29] | 831k GPU, 70k on 12 CPU threads |
+| bmt2-ohlc+cal@t-ens4-sym (research tier, 4-seed ensemble) | 4 x 0.11M | +4.57 % | +1.12 % [+0.94, +1.31] | 85k GPU, 8.4k on 12 CPU threads |
+| bmt2-ohlc+cal@t (research tier) | 0.11M | +4.50 % | +1.04 % [+0.86, +1.23] | 831k GPU, 70k on 12 CPU threads |
+| bmt2-syn-ohlc+cal@t (synthetic data only) | 0.11M | +4.15 % | +0.68 % [+0.48, +0.88] | same as bmt2-ohlc+cal@t |
+| bmt-t (phase 2, returns only) | 0.11M | +4.03 % | +0.56 % [+0.38, +0.73] | 489k GPU, 74k on 12 CPU threads |
 | Timestral-209M, reference pipeline | 209M | +3.50 % | 0 | 1.1k GPU (PyTorch) |
 | Timestral-209M, production kernel (max / fast) | 209M | +3.34 % / +2.70 % | -0.16 % / -0.83 % | 5.6k / 15k GPU |
 | GARCH(1,1)-t | 4 per asset | +3.21 % | -0.30 % [-0.47, -0.12] | CPU |
@@ -30,7 +32,7 @@ Status: private pre-release, nothing published. Code: Apache-2.0 (`LICENSE`, `NO
 The whole field sits within about 4.5 % of a Gaussian random walk. The candidates' edge is small, separated from zero, the same
 on assets they never trained on, and comes with a forward that is one to two orders of magnitude faster. It is an edge in
 volatility and tail shape: after trading costs no forecaster here, ours included, shows a robust tradable edge
-(leaderboard, "Tradable value": two of about 150 net-of-cost intervals exclude zero, neither confirmed by a sibling model). Speed was measured on a GPU shared with production workloads.
+(leaderboard, "Tradable value": two of about 150 net-of-cost intervals exclude zero, neither confirmed by a sibling model). Speed was measured on a GPU shared with production workloads (85-100 % co-tenant load, +-30 % run to run); the GPU rows read the batch from the pinned upload buffer as `serve` does, and the ensemble row is flip-averaged (8 forwards per row).
 
 Also here: `docs/RESEARCH_LOG.md` (every search trial), `docs/INTEGRATION.md` (consumer hook and offline A/B recipe),
 `models/` (the two tiers and their cards).
