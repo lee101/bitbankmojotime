@@ -76,3 +76,17 @@ Primary statistic: sPL (asset-equal scaled pinball) per horizon and its mean ove
 
 `runs/preds/hourly/llm-*.npy|json` (gitignored), `bench/llmfc/RESULTS.md`, `bench/llmfc/REGISTER_ROWS.md`,
 `~/research_data/llm_spend/spend.jsonl`.
+
+## Amendments (before any score was computed)
+
+- A1 (2026-11-24, after the 5-row pilot + 4 debug calls, USD 0.043 spent, nothing scored). At `reasoning_effort: low` and
+  `minimal` the gateway's `deepseek-v4-flash` runs an unbounded chain of thought (it hand-computes the context standard
+  deviation, 6,000-7,700 characters of reasoning, hits `max_tokens` 2500 with empty content, 0 / 7 parsed). Raising the cap
+  to cover it (~8k reasoning tokens) costs ~USD 0.01 per call, i.e. ~USD 12 for the two 600-row arms, over the slot. Changes:
+  (1) the flash arms (`llm-flash`, `llm-flash-refine`) run in non-thinking mode (`reasoning_effort: none`, 324 output tokens
+  and a valid JSON in the debug call) and the prompt additionally states the mean / std of the last 256, 64 and 24 bars and
+  the 24-bar sum computed from the same returns (PIT clean, same information), with the instruction not to recompute by hand;
+  (2) because flash no longer tests "low thinking", `gpt-6.1-sol` at `reasoning_effort: low` (bounded on OpenAI models) on the
+  150 secondary rows becomes the low-thinking arm and runs regardless of the 10 % gate, subject only to the cost rule of
+  section 4 (pilot of 5 rows first; `max_tokens` 2500; the cost rule caps its row count). Decision rules of section 5 are
+  unchanged and apply to each arm on its rows.

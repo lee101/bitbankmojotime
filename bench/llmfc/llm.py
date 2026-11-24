@@ -16,7 +16,12 @@ TOTAL = [spent()]
 SYS = "You are a quantitative forecaster. Answer with one JSON object only, no prose, no markdown."
 
 
-def prompt(ret_bp, hint=None):
+def stats(c):
+    return (f"\n\nSummary of the same returns (bp): mean of last 256 = {c.mean():.1f}, std of last 256 = {c.std():.1f}, std of last 64 = {c[-64:].std():.1f}, "
+            f"std of last 24 = {c[-24:].std():.1f}, sum of last 24 = {c[-24:].sum():.0f}. Do not recompute statistics by hand; reason briefly and answer.")
+
+
+def prompt(ret_bp, hint=None, with_stats=True):
     s = " ".join(str(int(x)) for x in ret_bp)
     p = (f"Below are the last {len(ret_bp)} consecutive 1-hour log returns of a liquid traded asset, oldest first, in basis points "
          f"(1 bp = 0.0001 log return). The asset, venue and dates are withheld.\n\nRETURNS: {s}\n\n"
@@ -24,6 +29,8 @@ def prompt(ret_bp, hint=None):
          f"at levels {LEV} in basis points, as a JSON object of the exact form "
          '{"1": [q01, q05, ..., q99], "6": [...], "24": [...]} with 21 numbers per list in non-decreasing order. '
          "Calibration matters: the quantiles will be scored with the pinball loss against the realised returns.")
+    if with_stats:
+        p += stats(np.asarray(ret_bp, dtype=np.float64))
     if hint is not None:
         h = {str(k): [int(round(x)) for x in v] for k, v in hint.items()}
         p += ("\n\nA specialised purpose-trained forecasting model produced these quantiles (bp) for the same horizons: "
@@ -51,7 +58,7 @@ def parse(txt):
 
 def call(model, msgs, key, effort="low", max_tokens=2500, timeout=180):
     body = json.dumps(dict(model=model, messages=msgs, routing_strategy="config", reasoning_effort=effort, max_tokens=max_tokens, temperature=0)).encode()
-    req = urllib.request.Request(URL, body, {"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+    req = urllib.request.Request(URL, body, {"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "bmt-llmfc/0.1 (python-urllib)"})
     t0 = time.time()
     with urllib.request.urlopen(req, timeout=timeout) as r:
         j = json.load(r)
@@ -73,6 +80,7 @@ def main():
     ap.add_argument("--refine", action="store_true"); ap.add_argument("--rows", default="rows")
     ap.add_argument("--limit", type=int, default=0); ap.add_argument("--dry", action="store_true")
     ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--effort", default="low"); ap.add_argument("--max-tokens", type=int, default=2500)
     a = ap.parse_args()
     key = os.environ.get("OPENPATHS_API_KEY")
     if not key and not a.dry:
@@ -90,7 +98,7 @@ def main():
     out_p = os.path.join(WT_PREDS, a.name + ".npy")
     meta_p = out_p[:-4] + ".json"
     Q = np.array(naive, dtype=np.float32, copy=True)
-    meta = dict(model=a.model, refine=a.refine, rows=a.rows, ctx=CTX, reasoning_effort="low", results={})
+    meta = dict(model=a.model, refine=a.refine, rows=a.rows, ctx=CTX, reasoning_effort=a.effort, max_tokens=a.max_tokens, results={})
     if os.path.exists(meta_p):
         old = json.load(open(meta_p)); meta["results"] = old.get("results", {})
         if os.path.exists(out_p):
@@ -113,7 +121,7 @@ def main():
                 rec["err"] = "cap"; break
             rec["tries"] += 1
             try:
-                txt, tin, tout, cost = call(a.model, msgs, key)
+                txt, tin, tout, cost = call(a.model, msgs, key, a.effort, a.max_tokens)
                 rec["tin"] += tin; rec["tout"] += tout; rec["cost"] += cost
                 q = parse(txt)
                 with LOCK:
