@@ -175,3 +175,26 @@ the 3-seed ensemble hourly but wins 1 of 3 seeds. Lower lr, a third layer, short
 | `ohlc+cal@t-lr5e-4` | {"lr": 0.0005} | 0.28142 | 2/3 | -0.026, +0.079, +0.002 | hourly h1 -0.09 [-0.11, -0.06]; hourly h6 -0.08 [-0.14, -0.02]; hourly h24 -0.07 [-0.16, +0.02]; daily h1 +0.08 [-0.01, +0.19]; daily h5 +0.16 [-0.03, +0.36] | not promoted |
 | `ohlc+cal@t-warm100` | {"warm": 100} | 0.28149 | 0/3 | -0.006, -0.034, -0.028 | hourly h1 +0.00 [-0.01, +0.02]; hourly h6 +0.01 [-0.01, +0.04]; hourly h24 -0.00 [-0.04, +0.04]; daily h1 -0.01 [-0.09, +0.06]; daily h5 -0.14 [-0.28, -0.03] | not promoted |
 | `ohlc+cal@t-d96` | {"d": 96} | 0.28145 | 1/3 | -0.037, +0.027, -0.018 | hourly h1 +0.01 [-0.02, +0.03]; hourly h6 +0.01 [-0.02, +0.05]; hourly h24 -0.00 [-0.07, +0.06]; daily h1 +0.04 [-0.01, +0.10]; daily h5 -0.12 [-0.23, -0.01] | not promoted |
+
+## Wave 6: CPU 5-seed rerun of the patch-8 lead (preregistered 2026-11-24, before any wave-6 training)
+
+Why this one: of the plan's next items, the 24 h ranking objective with market-state inputs ran on the `agent/*` branches, the
+real-fill check needs order-book data (no trainer work), the permissive ctx256 variant is on the leaderboard (`bmt2-syn-ohlc+cal-ctx256@t`)
+and the kernels are done. The only open validation lead in this log is wave 5's `patch8` (3/3 seed wins, +0.03 / +0.11 / +0.13 %,
+ensemble intervals include zero), flagged "worth a 5-seed rerun". GPU is reserved for production, so this runs on CPU
+(`train/wave6.py`, nice 10, 8 threads, load gate 45, paused in the weekday 09:00-10:00 / 15:20-16:15 ET windows).
+
+- Arms: incumbent `ohlc+cal@t` (0.11M, patch 16) vs `ohlc+cal@t-patch8` (same weights count, 64 tokens, 2x encoder cost, inside the 4x cap).
+- Seeds 0-4. Seeds 0-2 are the wave-5 checkpoints of both arms (GPU, bf16 autocast), rescored on CPU in fp32; seeds 3-4 are trained
+  here on CPU (fp32) for BOTH arms with the wave-5 recipe (1,500 steps x batch 1,024, lr 1e-3, EMA 0.998, best of the 250-step
+  validation checks), so every seed pair is like-for-like in hardware.
+- Rows, objective, folds: unchanged (section 6b, A8).
+- Primary (decides): wave-5 rule with K = 5: the 5-seed quantile-averaged ensemble of the candidate vs the incumbent's, paired
+  block bootstrap, 95 % interval of the improvement > 0 at >= 2 of 5 (task, horizon) pairs and < 0 at none, AND the candidate wins
+  the objective for >= 4 of the 5 seed pairs.
+- Secondary (reported, not decisive): per-seed paired intervals for seeds 3-4; the same 5-seed ensembles vs the promoted
+  `bmt2-ohlc+cal` (size s, search checkpoints, single pass) on the same validation rows.
+- If promoted: the 5-seed patch-8 ensemble is scored once on the test folds (`-ens5` and `-ens5-sym` rows) and added to the
+  leaderboard; else the null is logged here and nothing touches test.
+- Separate, not a test fold: an out-of-time sanity read of the F4 checkpoints of the promoted model (`train/oot.py`) on hourly
+  origins 2026-11-12 .. 11-23 from the extended kline dump, stride 5, test-row rules, 1-day blocks.

@@ -49,3 +49,20 @@ def pause_if_needed(min_free_mb=1500, poll=30):
             pass
         time.sleep(poll)
     return time.time() - t0
+
+
+CPU_QUIET_ET = (((9, 0), (10, 0)), ((15, 20), (16, 15)))
+
+
+def cpu_quiet(now=None):
+    n = now or datetime.datetime.now(zoneinfo.ZoneInfo("America/New_York"))
+    return n.weekday() < 5 and any(a <= (n.hour, n.minute) < b for a, b in CPU_QUIET_ET)
+
+
+def cpu_gate(max_load=None, poll=30):
+    """CPU runs on a shared host: wait out the weekday ET quiet windows and a 1-minute load average above BMT_CPU_LOAD (default 45)."""
+    max_load = max_load or float(os.environ.get("BMT_CPU_LOAD", "45"))
+    t0 = time.time()
+    while cpu_quiet() or os.getloadavg()[0] > max_load:
+        time.sleep(poll)
+    return time.time() - t0

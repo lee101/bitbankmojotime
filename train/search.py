@@ -49,7 +49,8 @@ def name_of(groups, size="s", frac=1.0):
 
 class Runner:
     def __init__(s, dev, placebo_seed=None, vram_gb=3.2, use5m=False):
-        wait_for_gpu(3500); cap_torch(vram_gb)
+        if dev == "cuda":
+            wait_for_gpu(3500); cap_torch(vram_gb)
         s.dev, u = dev, D.universe()
         if use5m:                                                    # second wave: the 64 evaluation symbols, trained on the seen ones only
             have = [x for x in u["eval"] if os.path.exists(os.path.join(D.CACHE, "rv5", x + ".npz"))]
@@ -79,7 +80,9 @@ class Runner:
 
     def yield_gpu(s):
         """quiet window: park the feature bank on the CPU and wait; nearly full card: release the cache and wait. Returns paused seconds."""
-        from bmtbench.gpu import in_blackout
+        from bmtbench.gpu import in_blackout, cpu_gate
+        if s.dev == "cpu":
+            return cpu_gate()
         t0 = time.time()
         if in_blackout():
             g = s.bank.g
