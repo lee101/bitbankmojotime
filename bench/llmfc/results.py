@@ -35,9 +35,9 @@ if __name__ == "__main__":
     r = D.load_rows(TASK)
     sub = json.load(open(SUB))
     llm_full = [m for m in ("llm-flash", "llm-flash-refine") if os.path.exists(os.path.join(WT_PREDS, m + ".npy"))]
-    llm_sec = llm_full + (["llm-sol"] if os.path.exists(os.path.join(WT_PREDS, "llm-sol.npy")) else [])
+    llm_sec = llm_full + [m for m in ("llm-sol", "llm-terra", "llm-sol-refine") if os.path.exists(os.path.join(WT_PREDS, m + ".npy"))]
     md = ["## Run summary\n", "| arm | model | effort | rows called | parsed | failure rate | tokens in / out | cost USD (peak prices) |", "|---|---|---|---|---|---|---|---|"]
-    for m in ("llm-flash", "llm-flash-refine", "llm-sol"):
+    for m in ("llm-flash", "llm-flash-refine", "llm-sol", "llm-terra", "llm-sol-refine"):
         t = meta(m)
         if t:
             md.append(f"| {m} | {t['model']} | {t['reasoning_effort']} | {t['n_done']} | {t['n_ok']} | {t['fail_rate']*100:.1f} % | {t['tokens_in']} / {t['tokens_out']} | {t['cost_usd']:.3f} |")

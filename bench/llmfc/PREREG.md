@@ -95,3 +95,7 @@ Primary statistic: sPL (asset-equal scaled pinball) per horizon and its mean ove
   more preregistered arms on the same 150 secondary rows, both under the same rules: `llm-terra` = `gpt-6.1-terra` at
   `reasoning_effort: low`, prompt only (is the low-thinking result model specific?), and `llm-sol-refine` = `gpt-6.1-sol` at
   low with the bmt2 hint (the owner's agents-on-top idea with a thinking model). Nothing else changes; cap USD 5 stands.
+- A3 (2026-11-24, after the refine arm's first pass, before any scoring). 135 / 600 refine rows and a similar share of the
+  base rows failed with gateway HTTP 429 (rate limit) on both attempts at 2 + 2 concurrent workers. A 429 is a transport
+  failure, not a model output failure, so those rows are re-queued at 1 worker until served (same prompt, same settings);
+  only rows whose served output cannot be parsed after the one retry count as model failures. Both counts are reported.

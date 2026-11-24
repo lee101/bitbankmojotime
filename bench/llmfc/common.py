@@ -29,4 +29,11 @@ def load_pred(model):
 def spent():
     if not os.path.exists(SPEND):
         return 0.0
-    return sum(json.loads(l)["est_cost_usd"] for l in open(SPEND) if l.strip())
+    tot = 0.0
+    for l in open(SPEND):
+        if not l.strip():
+            continue
+        j = json.loads(l)
+        if j.get("slot") == "PMLLMFC":
+            tot += float(j.get("est_cost_usd", j.get("usd", 0.0)))
+    return tot
