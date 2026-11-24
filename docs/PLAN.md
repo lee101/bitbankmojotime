@@ -44,6 +44,27 @@ Numbers quoted here are in `bench/LEADERBOARD.md`; licences in `docs/SCOPE.md`.
 4. Kernel work of section 4 (done for bmt2 on 2026-11-19: 2-3x on CPU, 2-8x on GPU; speed is not the bottleneck for any
    current consumer).
 
+### Status of the list (2026-11-24, CPU slot)
+
+Item 1 ran on the `agent/*` branches (24 h ranking with market state, tilt and gearing tests); item 2 needs order-book / trade data;
+item 3's ctx256 permissive model is on the leaderboard; item 4 is done. The last open validation lead, patch 8, closed as a registered
+null in wave 6 (5/5 seed wins, +0.08 %, no (task, horizon) separated). CPU throughput with 8 threads: size t 4,500 samples/s (25 min per
+four-fold seed), patch 8 2,150 (50 min), size s about 1,400 (about 1.5 h): single seeds are CPU-feasible, multi-seed waves of size s are not.
+Remaining untested training-side ideas, by expected value: patch 8 + distillation into one model (if the 0.03-0.05 % is wanted at q0),
+spliced generalised-Pareto tails, synthetic pre-training then real fine-tuning for the research tier (the data curve is flat, so a
+small prior), a sign-equivariant head (replaces 2-pass flip averaging, compute only).
+
+### Closing Timestral's h 24 gap (proposals only)
+
+On the PMLLMFC subsample Timestral-official trails bmt2 by +0.0351 [+0.0099, +0.0604] sPL at h 24 (+0.0145 horizon mean); on the full
+test rows the gap is 1.12 % with the 512-bar input and 0.36 % with 2,048 bars, so most of it is context length. Recipe changes, in order:
+(1) 2,048+ bars or a coarse 24 h token stream by default for h >= 24, since one 24 h target needs many 24 h blocks of volatility
+history; (2) a range channel (log high/low, Garman-Klass), the single input that moved bmt2 most, through a small adapter or
+last-layer fine-tune on crypto pinball (research tier, Mistral licence terms); (3) train or fine-tune the h 24 head on cumulative 24 h
+pinball in sqrt(h)-scaled units instead of aggregating one-step forecasts; (4) shrink the h 24 median toward zero (Timestral's h 24
+IC is 0.03 against bmt2's 0.11, so its median adds pinball noise) and refit the spread per horizon on validation; (5) or distil bmt2's
+h 24 quantiles into the adapter. Each is a validation-first experiment under section 6b, scored on test once if promoted.
+
 ## 2. Autoresearch loop
 
 Objective: validation sPL (asset-equal scaled pinball), averaged over the four folds' validation windows (the 90 days before each

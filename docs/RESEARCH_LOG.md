@@ -198,3 +198,40 @@ ensemble intervals include zero), flagged "worth a 5-seed rerun". GPU is reserve
   leaderboard; else the null is logged here and nothing touches test.
 - Separate, not a test fold: an out-of-time sanity read of the F4 checkpoints of the promoted model (`train/oot.py`) on hourly
   origins 2026-11-12 .. 11-23 from the extended kline dump, stride 5, test-row rules, 1-day blocks.
+
+### Wave 6 result (2026-11-24): NOT PROMOTED (registered null)
+
+CPU, 8 threads, nice 10, load 11-21 on 72 threads. Size t trains at about 4,500 samples/s (1,500 x 1,024 steps = 6.1 min per fold with
+its validation checks, 25 min per four-fold seed), patch 8 at about 2,150 samples/s (12.6 min per fold, 50 min per seed), size s about
+1,400 samples/s (30-step smoke). Wall time: 2.5 h training (seeds 3-4, both arms), 0.5 h scoring and timing.
+
+| config | validation objective (5-seed ensemble) | seed wins | per-seed improvement % (seeds 0-4) | ensemble paired improvement % by (task, horizon), 95 % | result |
+|---|---|---|---|---|---|
+| `ohlc+cal@t-inc` | 0.28143 |  |  |  | incumbent |
+| `ohlc+cal@t-patch8` | 0.28120 | 5/5 | +0.028, +0.113, +0.126, +0.060, +0.103 | hourly h1 +0.04 [-0.01, +0.08]; hourly h6 +0.03 [-0.08, +0.13]; hourly h24 +0.05 [-0.06, +0.16]; daily h1 +0.10 [-0.12, +0.33]; daily h5 +0.23 [-0.18, +0.66] | not promoted (0 of 5 pairs separated) |
+
+- Secondary, per seed (CPU seeds, single model vs single model): seed 3 hourly h1 +0.06 [+0.01, +0.12], seed 4 +0.07 [+0.02, +0.12];
+  every other pair includes zero, so neither passes the single-model rule either.
+- Secondary, vs the promoted size-s `bmt2-ohlc+cal` (single pass, objective 0.28157): incumbent 5-seed ensemble hourly
+  +0.12 [+0.08, +0.16] / +0.10 [+0.02, +0.18] / +0.10 [+0.00, +0.18], daily h1 -0.13 [-0.23, -0.00], daily h5 +0.07 [-0.12, +0.23];
+  patch-8 5-seed ensemble hourly +0.16 [+0.10, +0.22] / +0.13 [+0.04, +0.22] / +0.15 [+0.02, +0.27], daily h1 -0.03 [-0.25, +0.19],
+  daily h5 +0.30 [-0.05, +0.70]. The gain over the promoted model is the ensembling already on the leaderboard (`@t-ens4`), not patch 8.
+- Reading: patch 8 is consistently a little better (10 of 10 seed-level objective wins across waves 5-6, +0.08 % on the ensemble),
+  but the effect is about a quarter of the validation noise per (task, horizon) and costs 2x encoder compute. Nothing touched test.
+  The lead is closed under the registered rule; pooling more seeds would only shrink an interval around a 0.03-0.05 % hourly effect.
+
+### Out-of-time sanity read (not a test fold): 2026-11-12 .. 11-23
+
+`train/oot.py`, F4 checkpoints (training targets end 2025-09-19, early-stopped on 2025-09-26 .. 12-25), hourly origins 2026-11-12 .. 11-23 (stride 5, test-row rules),
+2,808 rows, 54 assets (14 never trained on), kline dump appended after the archive (overlapping closes identical). 1-day blocks,
+12 blocks, so the intervals are wide. sPL skill vs the Gaussian random walk, %:
+
+| model | h 1 | h 6 | h 24 |
+|---|---|---|---|
+| `bmt2-ohlc+cal-sym` (promoted) | +3.53 [+1.68, +5.71] | +2.96 [+1.26, +5.03] | +1.20 [-0.88, +4.64] |
+| `bmt2-ohlc+cal@t-kd-sym` (q0) | +3.30 [+1.34, +5.71] | +3.16 [+1.35, +5.36] | +1.34 [-0.97, +5.08] |
+| same, never-trained-on assets: promoted | +1.59 [-1.11, +4.50] | +1.11 [-0.54, +3.05] | +0.02 [-1.64, +2.93] |
+
+Test-fold reference (hourly, all rows): +4.5 % at h 1. The model still beats the random walk at h 1 / 6 fourteen months after its
+training data ended; h 24 and the held-out assets are not separated on 12 days. No promoted-model degradation is visible, and no
+pair of the bmt2 variants is separated.
