@@ -90,3 +90,8 @@ Primary statistic: sPL (asset-equal scaled pinball) per horizon and its mean ove
   150 secondary rows becomes the low-thinking arm and runs regardless of the 10 % gate, subject only to the cost rule of
   section 4 (pilot of 5 rows first; `max_tokens` 2500; the cost rule caps its row count). Decision rules of section 5 are
   unchanged and apply to each arm on its rows.
+- A2 (2026-11-24, after the 5-row sol pilot, USD 0.070 spent, nothing scored). Sol at low parsed 5 / 5 at ~870 in / ~270 out
+  tokens (~USD 0.0045 per call), so the 150-row sol arm costs ~USD 0.7 and the whole plan ~USD 1.7. The slack is used for two
+  more preregistered arms on the same 150 secondary rows, both under the same rules: `llm-terra` = `gpt-6.1-terra` at
+  `reasoning_effort: low`, prompt only (is the low-thinking result model specific?), and `llm-sol-refine` = `gpt-6.1-sol` at
+  low with the bmt2 hint (the owner's agents-on-top idea with a thinking model). Nothing else changes; cap USD 5 stands.
